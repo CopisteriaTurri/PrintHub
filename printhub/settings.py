@@ -2,7 +2,7 @@
 
 Tutto ciò che cambia tra sviluppo e produzione arriva da variabili d'ambiente
 (vedi .env.example). I default sono pensati per lo sviluppo locale: SQLite e
-canali in memoria, senza Redis.
+canali in memoria, senza Valkey.
 """
 
 import os
@@ -100,16 +100,18 @@ DATABASES = {
     )
 }
 
-# Canali: Redis in produzione (più processi devono potersi parlare: la richiesta
+# Canali: Valkey in produzione (più processi devono potersi parlare: la richiesta
 # HTTP che crea un lavoro avvisa la connessione WebSocket dell'agente, che può
 # stare in un altro processo). In memoria va bene solo con un processo, cioè in
 # sviluppo e nei test.
-REDIS_URL = os.environ.get("REDIS_URL", "")
-if REDIS_URL:
+# Valkey parla il protocollo di Redis: l'URL è `redis://…` e il backend è
+# quello di channels-redis. Va bene anche Redis.
+CHANNEL_LAYER_URL = os.environ.get("CHANNEL_LAYER_URL", "")
+if CHANNEL_LAYER_URL:
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {"hosts": [REDIS_URL]},
+            "CONFIG": {"hosts": [CHANNEL_LAYER_URL]},
         }
     }
 else:

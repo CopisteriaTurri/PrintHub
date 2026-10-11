@@ -11,10 +11,11 @@ services:
     networks: [printhub]
     restart: unless-stopped
 
-  printhub-redis:
-    image: redis:7-alpine
-    # Solo canale tra processi: niente persistenza su disco.
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+  # Valkey: fork di Redis con licenza BSD, stesso protocollo. Solo canale tra
+  # processi: niente persistenza su disco.
+  printhub-valkey:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
     networks: [printhub]
     restart: unless-stopped
 
@@ -23,13 +24,13 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://printhub:${POSTGRES_PASSWORD}@printhub-db:5432/printhub
-      REDIS_URL: redis://printhub-redis:6379/0
+      CHANNEL_LAYER_URL: redis://printhub-valkey:6379/0
       MEDIA_ROOT: /app/media
     volumes:
       - /mnt/nvme/docker/printhub/media:/app/media
     ports:
       - "8010:8000"
-    depends_on: [printhub-db, printhub-redis]
+    depends_on: [printhub-db, printhub-valkey]
     networks: [printhub, cloudflared-copturri]
     restart: unless-stopped
 
