@@ -1,0 +1,23 @@
+# Configurazione degli strumenti di sviluppo, come in CopyaGo.
+# Nessuna sezione [project]: Print Hub non è un pacchetto installabile, le
+# dipendenze restano in requirements.txt.
+
+[tool.black]
+line-length = 88
+target-version = ["py313"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+extend-exclude = ["staticfiles", "media"]
+
+[tool.ruff.lint]
+# Errori veri e import ordinati; la forma la decide black.
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"*/migrations/*" = ["E501"]
+
+[tool.coverage.run]
+source = ["hub", "printhub"]
+omit = ["*/migrations/*", "*/tests/*"]

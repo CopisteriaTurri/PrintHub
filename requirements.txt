@@ -1,0 +1,7 @@
+Django>=5.2.18,<5.3
+channels>=4.3,<5
+channels-redis>=4.3,<5
+uvicorn[standard]>=0.54,<1
+whitenoise>=6.12,<7
+dj-database-url>=3.1,<4
+psycopg[binary]>=3.3,<4
