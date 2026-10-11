@@ -1,4 +1,10 @@
 # Print Hub in produzione. Variabili in .env (vedi .env.example).
+#
+# Un solo processo, canali in memoria. Per scalare su più processi aggiungi un
+# servizio Valkey (image valkey/valkey:8-alpine, command valkey-server --save ""
+# --appendonly no) e imposta su printhub:
+#   CHANNEL_LAYER_URL: redis://printhub-valkey:6379/0
+#   WEB_CONCURRENCY: 4
 services:
   printhub-db:
     image: postgres:17
@@ -11,26 +17,17 @@ services:
     networks: [printhub]
     restart: unless-stopped
 
-  # Valkey: fork di Redis con licenza BSD, stesso protocollo. Solo canale tra
-  # processi: niente persistenza su disco.
-  printhub-valkey:
-    image: valkey/valkey:8-alpine
-    command: ["valkey-server", "--save", "", "--appendonly", "no"]
-    networks: [printhub]
-    restart: unless-stopped
-
   printhub:
     image: localhost:5000/printhub:latest
     env_file: .env
     environment:
       DATABASE_URL: postgres://printhub:${POSTGRES_PASSWORD}@printhub-db:5432/printhub
-      CHANNEL_LAYER_URL: redis://printhub-valkey:6379/0
       MEDIA_ROOT: /app/media
     volumes:
       - /mnt/nvme/docker/printhub/media:/app/media
     ports:
       - "8010:8000"
-    depends_on: [printhub-db, printhub-valkey]
+    depends_on: [printhub-db]
     networks: [printhub, cloudflared-copturri]
     restart: unless-stopped
 

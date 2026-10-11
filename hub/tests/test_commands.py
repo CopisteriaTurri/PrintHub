@@ -42,3 +42,21 @@ class CommandsTests(TestCase):
             run("housekeeping"), ["Lavori scaduti: 0. File cancellati: 0."]
         )
         self.assertEqual(Tenant.objects.count(), 1)
+
+
+class WorkersGuardTests(TestCase):
+    def test_piu_processi_senza_channel_layer_non_parte(self):
+        import os
+        import subprocess
+        import sys
+
+        env = {**os.environ, "WEB_CONCURRENCY": "2", "DJANGO_DEBUG": "1"}
+        env.pop("CHANNEL_LAYER_URL", None)
+        result = subprocess.run(
+            [sys.executable, "manage.py", "check"],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("richiede CHANNEL_LAYER_URL", result.stderr)

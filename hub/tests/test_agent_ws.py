@@ -4,10 +4,12 @@
 thread, che non vedrebbero i dati dentro la transazione di un TestCase.
 """
 
+from unittest import mock
+
 from asgiref.sync import sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 
 from hub import services
 from hub.models import Agent, Job
@@ -157,4 +159,41 @@ class AgentSocketTests(TempMediaMixin, TransactionTestCase):
         await ws.send_json_to({"type": "futuro.messaggio"})
         await ws.send_json_to({"type": "ping"})
         self.assertEqual(await ws.receive_json_from(), {"type": "pong"})
+        await ws.disconnect()
+
+
+@override_settings(PRINTHUB_RESYNC_INTERVAL=0.05, PRINTHUB_REOFFER_AFTER=0)
+class ResyncTests(TempMediaMixin, TransactionTestCase):
+    """Il controllo periodico consegna i lavori anche senza notifica."""
+
+    def setUp(self):
+        self.w = make_world()
+
+    async def test_lavoro_arriva_anche_se_la_notifica_va_persa(self):
+        ws = WebsocketCommunicator(
+            application,
+            "/agent/v1",
+            headers=[(b"authorization", f"Bearer {self.w['agent_token']}".encode())],
+        )
+        await ws.connect()
+        await ws.send_json_to(HELLO)
+        await ws.receive_json_from()  # welcome
+
+        @sync_to_async
+        def create_without_notify():
+            with mock.patch("hub.notify.job_created"):
+                upload = SimpleUploadedFile("f.pdf", PDF)
+                job, _ = services.create_job(
+                    self.w["key"], "k1", upload, {"profile": "fattura"}
+                )
+            return job.id
+
+        job_id = await create_without_notify()
+        offer = await ws.receive_json_from(timeout=2)
+        self.assertEqual(offer["job_id"], job_id)
+        # Dopo l'ack non viene più riproposto.
+        await ws.send_json_to({"type": "job.ack", "job_id": job_id})
+        await ws.send_json_to({"type": "ping"})
+        self.assertEqual(await ws.receive_json_from(), {"type": "pong"})
+        self.assertTrue(await ws.receive_nothing(timeout=0.3))
         await ws.disconnect()

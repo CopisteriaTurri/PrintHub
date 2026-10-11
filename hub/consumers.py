@@ -5,10 +5,12 @@ accesso al database passa da `database_sync_to_async`: l'ORM di Django è
 sincrono e non può girare direttamente dentro il loop asincrono.
 """
 
+import asyncio
 import logging
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.conf import settings
 
 from . import notify, services
 from .services import HubError
@@ -24,6 +26,7 @@ CLOSE_REPLACED = 4409
 class AgentConsumer(AsyncJsonWebsocketConsumer):
     agent = None
     ready = False  # diventa True dopo un `hello` valido
+    resync_task = None
 
     async def connect(self):
         # L'autenticazione è il token nell'header Authorization: un browser non
@@ -51,6 +54,8 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
         log.info("agente %s connesso", self.agent)
 
     async def disconnect(self, code):
+        if self.resync_task:
+            self.resync_task.cancel()
         if self.agent is None:
             return
         await self.channel_layer.group_discard(
@@ -115,6 +120,24 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json(welcome)
         for offer in offers:
             await self.send_json(offer)
+        if self.resync_task is None:
+            self.resync_task = asyncio.create_task(self.resync_loop())
+
+    async def resync_loop(self):
+        """Controllo periodico nel database (`services.stale_offers`): i lavori
+        arrivano anche se una notifica del channel layer va persa."""
+        while True:
+            await asyncio.sleep(settings.PRINTHUB_RESYNC_INTERVAL)
+            try:
+                offers = await database_sync_to_async(services.stale_offers)(self.agent)
+                for offer in offers:
+                    await self.send_json(offer)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # Un errore temporaneo (es. database irraggiungibile) non deve
+                # chiudere la connessione: si riprova al giro successivo.
+                log.exception("agente %s: controllo periodico non riuscito", self.agent)
 
     async def on_ack(self, msg):
         await database_sync_to_async(services.ack_job)(

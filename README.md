@@ -59,7 +59,7 @@ export DJANGO_DEBUG=1
 .venv/bin/uvicorn printhub.asgi:application --reload
 ```
 
-Senza `DATABASE_URL` usa SQLite; senza `CHANNEL_LAYER_URL` i canali restano in memoria, quindi va bene un solo processo.
+Senza `DATABASE_URL` usa SQLite; senza `CHANNEL_LAYER_URL` i canali restano in memoria.
 
 Test, formattazione e lint:
 
@@ -71,8 +71,10 @@ Test, formattazione e lint:
 
 ## Produzione
 
-`docker-compose.yml` avvia l'hub (uvicorn, HTTP e WebSocket sulla stessa porta), Postgres, [Valkey](https://valkey.io) e un processo di manutenzione oraria. Le variabili sono in `.env`: parti da [.env.example](.env.example).
+`docker-compose.yml` avvia l'hub (uvicorn, HTTP e WebSocket sulla stessa porta), Postgres e un processo di manutenzione oraria. Le variabili sono in `.env`: parti da [.env.example](.env.example).
 
-- **Valkey è necessario** con più di un processo: la richiesta HTTP che crea un lavoro deve raggiungere la connessione WebSocket dell'agente, che può stare in un altro processo. Valkey è il fork di Redis con licenza BSD; parla lo stesso protocollo, quindi funziona anche Redis (`CHANNEL_LAYER_URL=redis://…`).
+- **Un solo processo** con canali in memoria: basta per molti agenti e qualche migliaio di lavori al giorno.
+- **Per scalare** su più processi (`WEB_CONCURRENCY > 1`) serve un channel layer condiviso: [Valkey](https://valkey.io), il fork di Redis con licenza BSD, impostando `CHANNEL_LAYER_URL=redis://…` (va bene anche Redis). Senza, l'hub si rifiuta di partire: un lavoro creato in un processo non avviserebbe l'agente collegato a un altro. Le istruzioni sono in testa a `docker-compose.yml`.
+- **Rete di sicurezza**: ogni connessione controlla nel database ogni 5 secondi se ci sono lavori non consegnati. Se una notifica va persa, il lavoro arriva comunque, con qualche secondo di ritardo.
 - **Manutenzione** (`manage.py housekeeping`, ogni ora): segna scaduti i lavori non partiti e cancella i file più vecchi di `PRINTHUB_FILE_RETENTION_DAYS` (default 7). Fatture e foto contengono dati personali: dei lavori vecchi restano solo i metadati.
 - Dietro cloudflared, HTTPS e WebSocket (`wss://`) passano senza configurazioni particolari.

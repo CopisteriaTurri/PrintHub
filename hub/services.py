@@ -14,6 +14,7 @@ from datetime import UTC, timedelta
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from . import notify, tokens
@@ -605,6 +606,22 @@ def pending_offers(agent, job_id=None):
             offered_at=timezone.now()
         )
     return [offer_message(j) for j in jobs]
+
+
+def stale_offers(agent):
+    """Rete di sicurezza per le connessioni aperte: lavori in coda mai proposti,
+    o proposti da più di PRINTHUB_REOFFER_AFTER secondi senza `job.ack`.
+
+    Copre le notifiche perse (processo riavviato, più processi senza channel
+    layer condiviso): un lavoro non resta mai fermo, al massimo arriva con
+    qualche secondo di ritardo.
+    """
+    cutoff = timezone.now() - timedelta(seconds=settings.PRINTHUB_REOFFER_AFTER)
+    stale = Job.objects.filter(agent=agent, state=Job.State.QUEUED).filter(
+        Q(offered_at__isnull=True) | Q(offered_at__lt=cutoff)
+    )
+    ids = list(stale.values_list("pk", flat=True))
+    return [o for job_id in ids for o in pending_offers(agent, job_id=job_id)]
 
 
 # Transizioni ammesse dai messaggi dell'agente (§4). Da uno stato finale non si esce.

@@ -15,7 +15,9 @@ RUN SECRET_KEY=build python manage.py collectstatic --noinput -v0 \
 USER printhub
 EXPOSE 8000
 ENTRYPOINT ["./entrypoint.sh"]
-# Un solo server per HTTP e WebSocket. --proxy-headers: dietro cloudflared lo
-# schema reale (https/wss) arriva negli header X-Forwarded-*.
+# Un solo server per HTTP e WebSocket. Il numero di processi lo legge uvicorn da
+# WEB_CONCURRENCY (default 1; più di 1 richiede CHANNEL_LAYER_URL).
+# --proxy-headers: dietro cloudflared lo schema reale (https/wss) arriva negli
+# header X-Forwarded-*.
 CMD ["uvicorn", "printhub.asgi:application", "--host", "0.0.0.0", "--port", "8000", \
-     "--workers", "2", "--proxy-headers", "--forwarded-allow-ips", "*"]
+     "--proxy-headers", "--forwarded-allow-ips", "*"]

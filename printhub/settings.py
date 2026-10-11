@@ -2,7 +2,7 @@
 
 Tutto ciò che cambia tra sviluppo e produzione arriva da variabili d'ambiente
 (vedi .env.example). I default sono pensati per lo sviluppo locale: SQLite e
-canali in memoria, senza Valkey.
+canali in memoria.
 """
 
 import os
@@ -100,13 +100,20 @@ DATABASES = {
     )
 }
 
-# Canali: Valkey in produzione (più processi devono potersi parlare: la richiesta
-# HTTP che crea un lavoro avvisa la connessione WebSocket dell'agente, che può
-# stare in un altro processo). In memoria va bene solo con un processo, cioè in
-# sviluppo e nei test.
+# Canali: in memoria con un solo processo, che basta per molti agenti. Con più
+# processi serve Valkey (o Redis): la richiesta HTTP che crea un lavoro deve
+# avvisare la connessione WebSocket dell'agente, che può stare in un altro processo.
 # Valkey parla il protocollo di Redis: l'URL è `redis://…` e il backend è
 # quello di channels-redis. Va bene anche Redis.
 CHANNEL_LAYER_URL = os.environ.get("CHANNEL_LAYER_URL", "")
+# Quanti processi avvia uvicorn: legge da solo WEB_CONCURRENCY (default 1).
+WORKERS = env_int("WEB_CONCURRENCY", 1)
+if WORKERS > 1 and not CHANNEL_LAYER_URL:
+    # Con canali in memoria ogni processo ha i suoi: un lavoro creato in un
+    # processo non avviserebbe l'agente collegato a un altro. Meglio non partire.
+    raise RuntimeError(
+        f"WEB_CONCURRENCY={WORKERS} richiede CHANNEL_LAYER_URL (Valkey o Redis)"
+    )
 if CHANNEL_LAYER_URL:
     CHANNEL_LAYERS = {
         "default": {
@@ -157,6 +164,10 @@ PRINTHUB_MAX_EXPIRES_IN = env_int("PRINTHUB_MAX_EXPIRES_IN", 24 * 3600)
 PRINTHUB_FILE_RETENTION_DAYS = env_int("PRINTHUB_FILE_RETENTION_DAYS", 7)
 # Intervallo di heartbeat comunicato agli agenti (§5.4).
 PRINTHUB_HEARTBEAT_INTERVAL = env_int("PRINTHUB_HEARTBEAT_INTERVAL", 20)
+# Ogni quanti secondi ogni connessione controlla nel database se ci sono lavori
+# non consegnati, e dopo quanti secondi senza `job.ack` un lavoro si ripropone.
+PRINTHUB_RESYNC_INTERVAL = float(os.environ.get("PRINTHUB_RESYNC_INTERVAL", 5))
+PRINTHUB_REOFFER_AFTER = env_int("PRINTHUB_REOFFER_AFTER", 30)
 
 LOGGING = {
     "version": 1,

@@ -1,6 +1,6 @@
 # Print Hub
 
-Progetto Django 5.2 (Python 3.13) con Channels e Valkey (channel layer): smista i lavori di stampa dai client agli agenti CLIPrint. Protocollo: `CLIPrint/docs/PROTOCOL.md` (repo CopisteriaTurri/CLIPrint), da tenere allineato a ogni modifica del comportamento.
+Progetto Django 5.2 (Python 3.13) con Channels (canali in memoria, Valkey opzionale per più processi): smista i lavori di stampa dai client agli agenti CLIPrint. Protocollo: `CLIPrint/docs/PROTOCOL.md` (repo CopisteriaTurri/CLIPrint), da tenere allineato a ogni modifica del comportamento.
 
 ## Comandi
 
