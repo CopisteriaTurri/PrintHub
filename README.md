@@ -73,12 +73,19 @@ Test, formattazione e lint:
 
 ## Produzione
 
-`docker-compose.yml` avvia l'hub (uvicorn, HTTP e WebSocket sulla stessa porta), Postgres e un processo di manutenzione oraria. Le variabili sono in `.env`: parti da [.env.example](.env.example).
+`docker-compose.yml` avvia l'hub (uvicorn, HTTP e WebSocket sulla stessa porta) e Postgres. Le variabili sono in `.env`: parti da [.env.example](.env.example).
 
 - **Un solo processo** con canali in memoria: basta per molti agenti e qualche migliaio di lavori al giorno.
 - **Per scalare** su più processi (`WEB_CONCURRENCY > 1`) serve un channel layer condiviso: [Valkey](https://valkey.io), il fork di Redis con licenza BSD, impostando `CHANNEL_LAYER_URL=redis://…` (va bene anche Redis). Senza, l'hub si rifiuta di partire: un lavoro creato in un processo non avviserebbe l'agente collegato a un altro. Le istruzioni sono in testa a `docker-compose.yml`.
 - **Rete di sicurezza**: ogni connessione controlla nel database ogni 5 secondi se ci sono lavori non consegnati. Se una notifica va persa, il lavoro arriva comunque, con qualche secondo di ritardo.
-- **Manutenzione** (`manage.py housekeeping`, ogni ora): segna scaduti i lavori non partiti e cancella i file più vecchi di `PRINTHUB_FILE_RETENTION_DAYS` (default 7). Fatture e foto contengono dati personali: dei lavori vecchi restano solo i metadati.
+- **Manutenzione** (`manage.py housekeeping`, ogni ora): segna scaduti i lavori non partiti e cancella i file più vecchi di `PRINTHUB_FILE_RETENTION_DAYS` (default 7). Fatture e foto contengono dati personali: dei lavori vecchi restano solo i metadati. Va lanciata dal cron dell'host (su TrueNAS: System → Advanced → Cron Jobs, utente `root`, ogni ora):
+
+  ```bash
+  docker compose -f /percorso/printhub/docker-compose.yml exec -T printhub python manage.py housekeeping
+  ```
+
+  `-T` perché cron non ha un terminale. Se un'ora salta (hub spento) non si perde niente: il giro successivo recupera tutto quello che è scaduto nel frattempo.
+- **File dei lavori** in `/app/media`, montato sull'host: devono sopravvivere quando il container viene ricreato a ogni deploy, altrimenti i lavori in coda in quel momento perdono il file e l'agente non riesce a scaricarlo. La cartella dev'essere scrivibile dall'utente del container: `chown 1000:1000 /mnt/nvme/docker/printhub/media`.
 - Dietro cloudflared, HTTPS e WebSocket (`wss://`) passano senza configurazioni particolari.
 - **Solo LAN su `http://`**: `PRINTHUB_SECURE_COOKIES=False`, altrimenti il browser non rimanda il cookie di sessione e il login all'admin fallisce. Client e agenti non usano cookie: per loro non cambia niente. Gli agenti in questo caso vogliono `allow_insecure = true` in `agent.toml`.
 - **Versione**: il builder passa `--build-arg APP_VERSION=$(git describe --tags --always)`; si vede nell'header dell'admin e in `/healthz`.
