@@ -1,0 +1,16 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrahead %}
+{{ block.super }}
+<link rel="icon" href="{% static 'hub/favicon.svg' %}" type="image/svg+xml">
+<link rel="icon" href="{% static 'hub/favicon.ico' %}" sizes="48x48">
+<link rel="apple-touch-icon" href="{% static 'hub/apple-touch-icon.png' %}">
+{% endblock %}
+
+{% block branding %}
+<div id="site-name"><a href="{% url 'admin:index' %}"><img src="{% static 'hub/logo.svg' %}" alt="{{ site_header|default:_('Django administration') }}" height="32" style="vertical-align: middle"></a></div>
+{% if user.is_anonymous %}
+  {% include "admin/color_theme_toggle.html" %}
+{% endif %}
+{% endblock %}

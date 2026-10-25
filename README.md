@@ -1,3 +1,5 @@
+<p align="center"><img src="hub/static/hub/logo.svg" alt="Print Hub" width="360"></p>
+
 # Print Hub
 
 Smista i lavori di stampa dalle applicazioni (CopyaGo, altri gestionali, script, n8n…) agli agenti CLIPrint installati sui PC con le stampanti.

@@ -54,6 +54,8 @@ CSRF_COOKIE_SECURE = not DEBUG
 SILENCED_SYSTEM_CHECKS = ["security.W004", "security.W008"]
 
 INSTALLED_APPS = [
+    # prima dell'admin, così i suoi template (logo e favicon) hanno la precedenza
+    "hub",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -61,7 +63,6 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "channels",
-    "hub",
 ]
 
 MIDDLEWARE = [
