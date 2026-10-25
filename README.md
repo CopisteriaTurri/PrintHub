@@ -80,3 +80,5 @@ Test, formattazione e lint:
 - **Rete di sicurezza**: ogni connessione controlla nel database ogni 5 secondi se ci sono lavori non consegnati. Se una notifica va persa, il lavoro arriva comunque, con qualche secondo di ritardo.
 - **Manutenzione** (`manage.py housekeeping`, ogni ora): segna scaduti i lavori non partiti e cancella i file più vecchi di `PRINTHUB_FILE_RETENTION_DAYS` (default 7). Fatture e foto contengono dati personali: dei lavori vecchi restano solo i metadati.
 - Dietro cloudflared, HTTPS e WebSocket (`wss://`) passano senza configurazioni particolari.
+- **Solo LAN su `http://`**: `PRINTHUB_SECURE_COOKIES=False`, altrimenti il browser non rimanda il cookie di sessione e il login all'admin fallisce. Client e agenti non usano cookie: per loro non cambia niente. Gli agenti in questo caso vogliono `allow_insecure = true` in `agent.toml`.
+- **Versione**: il builder passa `--build-arg APP_VERSION=$(git describe --tags --always)`; si vede nell'header dell'admin e in `/healthz`.

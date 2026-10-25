@@ -12,6 +12,13 @@ COPY . .
 RUN SECRET_KEY=build python manage.py collectstatic --noinput -v0 \
     && useradd --system --uid 1000 printhub \
     && mkdir -p /app/media && chown printhub /app/media
+# La versione mostrata nell'admin e in /healthz. Chi costruisce passa il commit,
+# perché qui dentro git non c'è (`.dockerignore` esclude `.git`):
+#   docker build --build-arg APP_VERSION=$(git describe --tags --always) .
+# Dichiarata dopo collectstatic: un ARG invalida la cache di ogni RUN che lo
+# segue, e collectstatic non deve rifarsi per un valore letto solo a runtime.
+ARG APP_VERSION=""
+ENV APP_VERSION=${APP_VERSION}
 USER printhub
 EXPOSE 8000
 ENTRYPOINT ["./entrypoint.sh"]

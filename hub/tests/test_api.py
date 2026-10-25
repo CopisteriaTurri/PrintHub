@@ -321,4 +321,6 @@ class AgentFileTests(ApiTestCase):
 
 class HealthTests(TestCase):
     def test_healthz(self):
-        self.assertEqual(self.client.get("/healthz").json(), {"status": "ok"})
+        with mock.patch("hub.views.APP_VERSION", "abc1234"):
+            data = self.client.get("/healthz").json()
+        self.assertEqual(data, {"status": "ok", "version": "abc1234"})

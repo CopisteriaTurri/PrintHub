@@ -9,7 +9,7 @@
 {% endblock %}
 
 {% block branding %}
-<div id="site-name"><a href="{% url 'admin:index' %}"><img src="{% static 'hub/logo.svg' %}" alt="{{ site_header|default:_('Django administration') }}" height="32" style="vertical-align: middle"></a></div>
+<div id="site-name"><a href="{% url 'admin:index' %}"><img src="{% static 'hub/logo.svg' %}" alt="{{ site_header|default:_('Django administration') }}" height="32" style="vertical-align: middle"></a>{% if APP_VERSION %} <small style="opacity: .7">v{{ APP_VERSION }}</small>{% endif %}</div>
 {% if user.is_anonymous %}
   {% include "admin/color_theme_toggle.html" %}
 {% endif %}

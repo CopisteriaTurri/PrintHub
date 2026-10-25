@@ -9,6 +9,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from . import services
 from .services import HubError
+from .version import APP_VERSION
 
 
 def error_response(code, message, status):
@@ -105,4 +106,4 @@ def agent_job_file(request, job_id):
 
 @require_GET
 def healthz(request):
-    return JsonResponse({"status": "ok"})
+    return JsonResponse({"status": "ok", "version": APP_VERSION})

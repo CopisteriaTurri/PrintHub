@@ -15,7 +15,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def env_bool(name, default=False):
-    return os.environ.get(name, str(default)).lower() in ("1", "true", "yes")
+    # Vuota vale come assente: `PRINTHUB_SECURE_COOKIES=` nel .env non deve
+    # spegnere un default di sicurezza.
+    value = os.environ.get(name, "").strip()
+    if not value:
+        return default
+    return value.lower() in ("1", "true", "yes")
 
 
 def env_int(name, default):
@@ -47,8 +52,13 @@ CSRF_TRUSTED_ORIGINS = [
 
 # Dietro cloudflared/reverse proxy il TLS termina prima di Django.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
+# Cookie solo su HTTPS. Un hub raggiungibile solo in LAN su http:// mette
+# PRINTHUB_SECURE_COOKIES=False, altrimenti il browser non rimanda il cookie di
+# sessione e il login all'admin fallisce senza errori. API e WebSocket non
+# usano cookie: non cambia niente per client e agenti.
+SECURE_COOKIES = env_bool("PRINTHUB_SECURE_COOKIES", not DEBUG)
+SESSION_COOKIE_SECURE = SECURE_COOKIES
+CSRF_COOKIE_SECURE = SECURE_COOKIES
 # Redirect a HTTPS e HSTS li fa cloudflared davanti all'hub. Farli anche qui
 # romperebbe gli accessi diretti in LAN e i controlli di salute su /healthz.
 SILENCED_SYSTEM_CHECKS = ["security.W004", "security.W008"]
@@ -88,6 +98,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "hub.version.app_version",
             ],
         },
     },
