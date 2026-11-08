@@ -97,3 +97,11 @@ riscontro negli ultimi `PRINTHUB_AGENT_OFFLINE_AFTER` secondi (default: tre
 intervalli di heartbeat). Al limite esatto è ancora online. Il margine tollera
 ritardi temporanei; dopo un arresto improvviso la presenza scade anche se il
 canale è rimasto registrato, e si ripristina al successivo contatto.
+
+### Lavori potenzialmente bloccati
+
+In admin i lavori consegnati o nello spooler senza riscontri da oltre
+`PRINTHUB_JOB_STALLED_AFTER` secondi (default 300) sono segnalati come
+potenzialmente bloccati. Il limite esatto non è ancora bloccato; in assenza
+di riscontri si usa la data di creazione. È un avviso diagnostico: non modifica
+lo stato e non ristampa. Controllare la stampante prima di ristampare.

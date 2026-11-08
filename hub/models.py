@@ -213,6 +213,7 @@ class Job(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     expires_at = models.DateTimeField()
+    agent_seen_at = models.DateTimeField(null=True, blank=True, editable=False)
     # Ultima volta che il lavoro è stato proposto all'agente (job.offer).
     offered_at = models.DateTimeField(null=True, blank=True)
 
@@ -235,6 +236,24 @@ class Job(models.Model):
 
     def __str__(self):
         return self.id
+
+    @classmethod
+    def stalled_filter(cls, now=None):
+        cutoff = (now or timezone.now()) - timedelta(
+            seconds=settings.PRINTHUB_JOB_STALLED_AFTER
+        )
+        return Q(state__in=[cls.State.DISPATCHED, cls.State.SPOOLED]) & (
+            Q(agent_seen_at__lt=cutoff)
+            | Q(agent_seen_at__isnull=True, created_at__lt=cutoff)
+        )
+
+    @property
+    def is_stalled(self):
+        cutoff = timezone.now() - timedelta(seconds=settings.PRINTHUB_JOB_STALLED_AFTER)
+        return (
+            self.state in (self.State.DISPATCHED, self.State.SPOOLED)
+            and (self.agent_seen_at or self.created_at) < cutoff
+        )
 
     @property
     def is_final(self):

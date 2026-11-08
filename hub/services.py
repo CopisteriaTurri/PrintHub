@@ -671,6 +671,9 @@ def update_job(agent, job_id, state, msg=None):
             )
             return False
         if state == job.state:
+            if not job.is_final:
+                job.agent_seen_at = timezone.now()
+                job.save(update_fields=["agent_seen_at"])
             return False
         if state not in _AGENT_TRANSITIONS.get(job.state, set()):
             log.warning(
@@ -682,7 +685,8 @@ def update_job(agent, job_id, state, msg=None):
             )
             return False
         job.state = state
-        fields = ["state", "updated_at"]
+        job.agent_seen_at = timezone.now()
+        fields = ["state", "updated_at", "agent_seen_at"]
         if msg.get("os_job_id") is not None:
             job.os_job_id = str(msg["os_job_id"])[:40]
             fields.append("os_job_id")

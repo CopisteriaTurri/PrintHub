@@ -181,6 +181,9 @@ PRINTHUB_AGENT_OFFLINE_AFTER = env_int(
 )
 if PRINTHUB_AGENT_OFFLINE_AFTER <= 0:
     raise ValueError("PRINTHUB_AGENT_OFFLINE_AFTER deve essere positivo")
+PRINTHUB_JOB_STALLED_AFTER = env_int("PRINTHUB_JOB_STALLED_AFTER", 300)
+if PRINTHUB_JOB_STALLED_AFTER <= 0:
+    raise ValueError("PRINTHUB_JOB_STALLED_AFTER deve essere positivo")
 # Ogni quanti secondi ogni connessione controlla nel database se ci sono lavori
 # non consegnati, e dopo quanti secondi senza `job.ack` un lavoro si ripropone.
 PRINTHUB_RESYNC_INTERVAL = float(os.environ.get("PRINTHUB_RESYNC_INTERVAL", 5))
