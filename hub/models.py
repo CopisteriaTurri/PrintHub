@@ -266,3 +266,19 @@ class Job(models.Model):
     @property
     def is_final(self):
         return self.state in self.FINAL_STATES
+
+
+class JobEvent(models.Model):
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="events")
+    timestamp = models.DateTimeField(default=timezone.now)
+    kind = models.CharField(max_length=40)
+    source = models.CharField(max_length=20)
+    details = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["timestamp", "id"]
+        indexes = [
+            models.Index(fields=["job", "timestamp", "id"], name="job_event_timeline")
+        ]
+        verbose_name = "evento lavoro"
+        verbose_name_plural = "eventi lavoro"

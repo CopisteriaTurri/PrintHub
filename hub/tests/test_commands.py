@@ -39,7 +39,8 @@ class CommandsTests(TestCase):
 
     def test_housekeeping(self):
         self.assertEqual(
-            run("housekeeping"), ["Lavori scaduti: 0. File cancellati: 0."]
+            run("housekeeping"),
+            ["Lavori scaduti: 0. File cancellati: 0. Eventi cancellati: 0."],
         )
         self.assertEqual(Tenant.objects.count(), 1)
 

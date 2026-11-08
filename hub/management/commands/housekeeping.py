@@ -17,4 +17,7 @@ class Command(BaseCommand):
     def handle(self, days, **options):
         expired = services.expire_overdue()
         purged = services.purge_files(days)
-        self.stdout.write(f"Lavori scaduti: {expired}. File cancellati: {purged}.")
+        events = services.purge_events()
+        self.stdout.write(
+            f"Lavori scaduti: {expired}. File cancellati: {purged}. Eventi cancellati: {events}."
+        )
