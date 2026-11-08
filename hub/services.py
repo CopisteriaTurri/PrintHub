@@ -18,7 +18,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from . import notify, tokens
-from .models import Agent, ApiKey, Job, Profile
+from .models import Agent, ApiKey, Job, JobEvent, Profile
 
 log = logging.getLogger(__name__)
 
@@ -258,6 +258,12 @@ def _existing_for_key(api_key, idempotency_key, request_hash):
     return job
 
 
+def record_event(job, kind, source, details=None):
+    return JobEvent.objects.create(
+        job=job, kind=kind, source=source, details=details or {}
+    )
+
+
 def create_job(api_key, idempotency_key, upload, meta):
     """Crea un lavoro. Restituisce (job, created): `created` è False quando la
     stessa richiesta era già arrivata (stessa Idempotency-Key e stesso contenuto)."""
@@ -359,6 +365,7 @@ def create_job(api_key, idempotency_key, upload, meta):
                 f"{job.id}.{_EXTENSIONS[mime]}", ContentFile(data), save=False
             )
             job.save(force_insert=True)
+            record_event(job, "created", "client", {"state": job.state})
             transaction.on_commit(lambda: notify.job_created(job))
     except IntegrityError:
         # Due richieste identiche in parallelo: ha vinto l'altra.
@@ -376,12 +383,30 @@ def create_job(api_key, idempotency_key, upload, meta):
 def expire_overdue(queryset=None):
     """Segna `expired` i lavori in coda oltre la scadenza (§3.2). Restituisce quanti."""
     qs = Job.objects.all() if queryset is None else queryset
-    return qs.filter(state=Job.State.QUEUED, expires_at__lte=timezone.now()).update(
-        state=Job.State.EXPIRED,
-        error_code="expired",
-        error_message="non partito entro la scadenza",
-        updated_at=timezone.now(),
+    now = timezone.now()
+    ids = list(
+        qs.filter(state=Job.State.QUEUED, expires_at__lte=now).values_list(
+            "pk", flat=True
+        )
     )
+    count = 0
+    for job_id in ids:
+        with transaction.atomic():
+            changed = Job.objects.filter(
+                pk=job_id, state=Job.State.QUEUED, expires_at__lte=now
+            ).update(
+                state=Job.State.EXPIRED,
+                error_code="expired",
+                error_message="non partito entro la scadenza",
+                updated_at=now,
+            )
+            if changed:
+                job = Job.objects.get(pk=job_id)
+                record_event(
+                    job, "state_changed", "hub", {"from": "queued", "to": "expired"}
+                )
+                count += 1
+    return count
 
 
 def get_job(api_key, job_id):
@@ -418,6 +443,7 @@ def cancel_job(api_key, job_id):
                 status=409,
             )
         was = job.state
+        record_event(job, "cancel_requested", "client")
         if was in Job.PENDING_STATES:
             job.state = Job.State.CANCELED
             job.error_code = "canceled"
@@ -425,6 +451,7 @@ def cancel_job(api_key, job_id):
             job.save(
                 update_fields=["state", "error_code", "error_message", "updated_at"]
             )
+            record_event(job, "state_changed", "client", {"from": was, "to": job.state})
         if was in (Job.State.DISPATCHED, Job.State.SPOOLED):
             transaction.on_commit(lambda: notify.job_cancel(job))
     return job
@@ -615,9 +642,13 @@ def pending_offers(agent, job_id=None):
     expire_overdue(qs)
     jobs = list(qs.order_by("created_at"))
     if jobs:
-        Job.objects.filter(pk__in=[j.pk for j in jobs]).update(
-            offered_at=timezone.now()
-        )
+        with transaction.atomic():
+            Job.objects.filter(pk__in=[j.pk for j in jobs]).update(
+                offered_at=timezone.now()
+            )
+            JobEvent.objects.bulk_create(
+                [JobEvent(job=j, kind="offer_attempt", source="hub") for j in jobs]
+            )
     return [offer_message(j) for j in jobs]
 
 
@@ -684,6 +715,7 @@ def update_job(agent, job_id, state, msg=None):
                 state,
             )
             return False
+        previous = job.state
         job.state = state
         job.agent_seen_at = timezone.now()
         fields = ["state", "updated_at", "agent_seen_at"]
@@ -697,6 +729,7 @@ def update_job(agent, job_id, state, msg=None):
             job.error_message = str(error.get("message") or "")[:500]
             fields += ["error_code", "error_message"]
         job.save(update_fields=fields)
+        record_event(job, "state_changed", "agent", {"from": previous, "to": state})
     return True
 
 
@@ -707,6 +740,10 @@ def ack_job(agent, job_id):
 def reject_job(agent, job_id, code, message=""):
     """`job.reject` (§5.2): `busy` lascia il lavoro in coda, gli altri lo fanno fallire."""
     if code == "busy":
+        with transaction.atomic():
+            job = Job.objects.select_for_update().filter(pk=job_id, agent=agent).first()
+            if job and not job.is_final:
+                record_event(job, "rejected", "agent", {"code": "busy"})
         return False
     return update_job(
         agent,
@@ -746,3 +783,18 @@ def purge_files(days=None):
         job.save(update_fields=["file", "file_purged_at", "updated_at"])
         count += 1
     return count
+
+
+def purge_events():
+    cutoff = timezone.now() - timedelta(days=settings.PRINTHUB_EVENT_RETENTION_DAYS)
+    count = 0
+    while True:
+        ids = list(
+            JobEvent.objects.filter(timestamp__lt=cutoff)
+            .order_by("pk")
+            .values_list("pk", flat=True)[:1000]
+        )
+        if not ids:
+            return count
+        deleted, _ = JobEvent.objects.filter(pk__in=ids).delete()
+        count += deleted

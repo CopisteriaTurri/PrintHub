@@ -8,7 +8,7 @@ from django.contrib import admin
 from django.utils import timezone
 
 from . import notify
-from .models import Agent, ApiKey, Job, Profile, Tenant
+from .models import Agent, ApiKey, Job, JobEvent, Profile, Tenant
 
 
 @admin.register(Tenant)
@@ -103,6 +103,20 @@ class StalledFilter(admin.SimpleListFilter):
         return queryset
 
 
+class JobEventInline(admin.TabularInline):
+    model = JobEvent
+    fields = ["timestamp", "kind", "source", "details"]
+    readonly_fields = fields
+    extra = 0
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Job)
 class JobAdmin(admin.ModelAdmin):
     list_display = [
@@ -120,6 +134,7 @@ class JobAdmin(admin.ModelAdmin):
     ]
     list_filter = [StalledFilter, "state", "tenant", "agent", "api_key"]
     list_select_related = ["agent", "api_key", "tenant"]
+    inlines = [JobEventInline]
     search_fields = ["id", "title", "client_ref", "idempotency_key"]
     date_hierarchy = "created_at"
     readonly_fields = [f.name for f in Job._meta.fields]

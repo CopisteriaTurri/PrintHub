@@ -105,3 +105,10 @@ In admin i lavori consegnati o nello spooler senza riscontri da oltre
 potenzialmente bloccati. Il limite esatto non è ancora bloccato; in assenza
 di riscontri si usa la data di creazione. È un avviso diagnostico: non modifica
 lo stato e non ristampa. Controllare la stampante prima di ristampare.
+
+### Storico dei lavori
+
+Il dettaglio admin mostra eventi registrati dall'hub a partire dall'attivazione
+della funzione. Gli orari sono quelli dell'hub; un tentativo di offerta non
+prova la consegna né la stampa. Housekeeping elimina gli eventi oltre
+`PRINTHUB_EVENT_RETENTION_DAYS` giorni (default 90), senza eliminare i lavori.

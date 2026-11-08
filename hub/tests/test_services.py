@@ -275,3 +275,48 @@ class LavoriBloccatiTests(ServicesTestCase):
         services.update_job(self.agent, job.id, Job.State.COMPLETED)
         job.refresh_from_db()
         self.assertFalse(job.is_stalled)
+
+
+class EventiTests(ServicesTestCase):
+    def test_transizioni_e_offerte_senza_duplicati_di_stato(self):
+        from hub.models import JobEvent
+
+        job = self.job()
+        services.pending_offers(self.agent)
+        services.pending_offers(self.agent)
+        services.ack_job(self.agent, job.id)
+        services.ack_job(self.agent, job.id)
+        self.assertEqual(
+            list(job.events.values_list("kind", flat=True)),
+            ["created", "offer_attempt", "offer_attempt", "state_changed"],
+        )
+        self.assertEqual(
+            JobEvent.objects.filter(job=job, kind="state_changed").count(), 1
+        )
+
+    def test_scadenza_idempotente_e_retention(self):
+        from hub.models import JobEvent
+
+        job = self.job()
+        Job.objects.filter(pk=job.pk).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+        self.assertEqual(services.expire_overdue(), 1)
+        self.assertEqual(services.expire_overdue(), 0)
+        self.assertEqual(job.events.filter(kind="state_changed").count(), 1)
+        JobEvent.objects.filter(job=job).update(
+            timestamp=timezone.now() - timedelta(days=91)
+        )
+        self.assertEqual(services.purge_events(), 2)
+        self.assertTrue(Job.objects.filter(pk=job.pk).exists())
+
+    def test_rollback_annulla_anche_evento(self):
+        from django.db import transaction
+
+        job = self.job()
+        with self.assertRaises(ValueError), transaction.atomic():
+            services.update_job(self.agent, job.id, Job.State.COMPLETED)
+            raise ValueError("rollback")
+        job.refresh_from_db()
+        self.assertEqual(job.state, Job.State.QUEUED)
+        self.assertEqual(job.events.count(), 1)
