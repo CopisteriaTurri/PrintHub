@@ -554,19 +554,32 @@ def agent_disconnected(agent, channel_name):
     )
 
 
-def agent_seen(agent, **fields):
-    Agent.objects.filter(pk=agent.pk).update(last_seen_at=timezone.now(), **fields)
+def agent_seen(agent, channel_name=None, **fields):
+    qs = Agent.objects.filter(pk=agent.pk, revoked_at__isnull=True)
+    if channel_name is not None:
+        qs = qs.filter(channel_name=channel_name)
+    return qs.update(last_seen_at=timezone.now(), **fields)
 
 
-def hello(agent, msg):
+@transaction.atomic
+def hello(agent, msg, channel_name=None):
     """Gestisce il primo messaggio dell'agente. Restituisce (welcome, offerte)."""
     if msg.get("protocol") != PROTOCOL_VERSION:
         raise HubError(
             "protocol_unsupported", f"protocollo supportato: {PROTOCOL_VERSION}"
         )
+    if channel_name is not None:
+        current = (
+            Agent.objects.select_for_update()
+            .filter(pk=agent.pk, channel_name=channel_name, revoked_at__isnull=True)
+            .exists()
+        )
+        if not current:
+            raise HubError("connection_replaced", "connessione non più attiva")
     printers = msg.get("printers") if isinstance(msg.get("printers"), list) else []
     agent_seen(
         agent,
+        channel_name=channel_name,
         agent_version=str(msg.get("agent_version") or "")[:40],
         os=str(msg.get("os") or "")[:40],
         printers=printers,

@@ -198,3 +198,49 @@ class PurgeTests(ServicesTestCase):
         self.assertTrue(new.file)
         # Un lavoro senza file non si può più scaricare.
         self.assertIsNone(services.can_download(self.agent, old.id))
+
+
+class PresenzaTests(ServicesTestCase):
+    def test_confine_canale_e_revoca(self):
+        from unittest.mock import patch
+
+        from django.test import override_settings
+
+        now = timezone.now()
+        self.agent.channel_name = "canale"
+        with (
+            override_settings(PRINTHUB_AGENT_OFFLINE_AFTER=60),
+            patch("hub.models.timezone.now", return_value=now),
+        ):
+            self.agent.last_seen_at = now - timedelta(seconds=60)
+            self.assertTrue(self.agent.online)
+            self.agent.last_seen_at -= timedelta(microseconds=1)
+            self.assertFalse(self.agent.online)
+            self.agent.last_seen_at = None
+            self.assertFalse(self.agent.online)
+            self.agent.last_seen_at = now
+            self.agent.channel_name = ""
+            self.assertFalse(self.agent.online)
+            self.agent.channel_name = "canale"
+            self.agent.revoked_at = now
+            self.assertFalse(self.agent.online)
+
+    def test_vecchio_canale_non_aggiorna_presenza_o_profili(self):
+        services.agent_connected(self.agent, "vecchio")
+        services.agent_connected(self.agent, "nuovo")
+        self.agent.refresh_from_db()
+        last_seen = self.agent.last_seen_at
+        self.assertEqual(
+            services.agent_seen(self.agent, channel_name="vecchio", printers=["x"]), 0
+        )
+        with self.assertRaises(services.HubError):
+            services.hello(
+                self.agent, {"protocol": 1, "profiles": []}, channel_name="vecchio"
+            )
+        self.agent.refresh_from_db()
+        self.assertEqual(self.agent.last_seen_at, last_seen)
+        self.assertNotEqual(self.agent.printers, ["x"])
+        self.assertTrue(Profile.objects.filter(agent=self.agent).exists())
+        services.agent_disconnected(self.agent, "vecchio")
+        self.agent.refresh_from_db()
+        self.assertEqual(self.agent.channel_name, "nuovo")

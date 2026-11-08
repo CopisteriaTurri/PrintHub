@@ -58,6 +58,15 @@ class AuthTests(ApiTestCase):
 
 
 class ProfilesTests(ApiTestCase):
+    def test_presenza_scaduta_nella_lista(self):
+        agent = self.w["agent"]
+        agent.channel_name = "canale"
+        agent.last_seen_at = timezone.now() - timedelta(seconds=61)
+        agent.save(update_fields=["channel_name", "last_seen_at"])
+        with self.settings(PRINTHUB_AGENT_OFFLINE_AFTER=60):
+            response = self.client.get("/api/v1/profiles", **self.auth)
+        self.assertFalse(response.json()["profiles"][0]["online"])
+
     def test_elenco(self):
         r = self.client.get("/api/v1/profiles", **self.auth)
         self.assertEqual(r.status_code, 200)

@@ -76,7 +76,9 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
 
         if kind == "ping":
             await self.send_json({"type": "pong"})
-            await database_sync_to_async(services.agent_seen)(self.agent)
+            await database_sync_to_async(services.agent_seen)(
+                self.agent, channel_name=self.channel_name
+            )
             return
         if kind == "hello":
             await self.on_hello(content)
@@ -110,7 +112,7 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
     async def on_hello(self, msg):
         try:
             welcome, offers = await database_sync_to_async(services.hello)(
-                self.agent, msg
+                self.agent, msg, channel_name=self.channel_name
             )
         except HubError as e:
             await self.send_error(e.code, e.message)
@@ -161,11 +163,13 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
         printers = msg.get("printers")
         if isinstance(printers, list):
             await database_sync_to_async(services.agent_seen)(
-                self.agent, printers=printers
+                self.agent, channel_name=self.channel_name, printers=printers
             )
 
     async def on_pong(self, msg):
-        await database_sync_to_async(services.agent_seen)(self.agent)
+        await database_sync_to_async(services.agent_seen)(
+            self.agent, channel_name=self.channel_name
+        )
 
     # --- Messaggi dal channel layer (type "hub.x" → metodo hub_x) -------------
 

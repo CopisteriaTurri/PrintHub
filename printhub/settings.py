@@ -176,6 +176,11 @@ PRINTHUB_MAX_EXPIRES_IN = env_int("PRINTHUB_MAX_EXPIRES_IN", 24 * 3600)
 PRINTHUB_FILE_RETENTION_DAYS = env_int("PRINTHUB_FILE_RETENTION_DAYS", 7)
 # Intervallo di heartbeat comunicato agli agenti (§5.4).
 PRINTHUB_HEARTBEAT_INTERVAL = env_int("PRINTHUB_HEARTBEAT_INTERVAL", 20)
+PRINTHUB_AGENT_OFFLINE_AFTER = env_int(
+    "PRINTHUB_AGENT_OFFLINE_AFTER", 3 * PRINTHUB_HEARTBEAT_INTERVAL
+)
+if PRINTHUB_AGENT_OFFLINE_AFTER <= 0:
+    raise ValueError("PRINTHUB_AGENT_OFFLINE_AFTER deve essere positivo")
 # Ogni quanti secondi ogni connessione controlla nel database se ci sono lavori
 # non consegnati, e dopo quanti secondi senza `job.ack` un lavoro si ripropone.
 PRINTHUB_RESYNC_INTERVAL = float(os.environ.get("PRINTHUB_RESYNC_INTERVAL", 5))
