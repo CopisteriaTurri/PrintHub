@@ -1,0 +1,2 @@
+{% extends "admin/base_site.html" %}
+{% block content %}<p>Confermare la ristampa di {{ job.pk }} per {{ job.tenant }}, profilo {{ job.profile_name }}, {{ job.copies }} copie?</p><p>Verificare la stampante: l'originale potrebbe essere già stato stampato.</p><form method="post">{% csrf_token %}<input type="hidden" name="token" value="{{ token }}"><button type="submit">Conferma ristampa</button></form><p><a href="{% url 'operations' %}">Indietro</a></p>{% endblock %}

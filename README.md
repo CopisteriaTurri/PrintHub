@@ -123,3 +123,12 @@ avvio. Usare un supervisore per la liveness e monitorare separatamente la
 readiness. Eseguire `manage.py housekeeping` via cron almeno ogni ora; lo stato
 admin segnala manutenzione oltre `PRINTHUB_HOUSEKEEPING_STALE_AFTER` secondi
 (default tre ore), senza compromettere la readiness.
+
+### Dashboard operativa
+
+`/admin/operations/` è riservata ai superuser, poiché gli utenti staff non
+sono associati a tenant. Mostra lavori e presenza e permette di chiedere
+l'annullamento. La ristampa richiede conferma esplicita, controlla profilo,
+opzioni e API key originale, e crea un file indipendente; reinviare la stessa
+conferma non duplica il lavoro. Una richiesta di annullamento nello spooler
+attende il riscontro dell'agente: verificare la stampante prima di ristampare.

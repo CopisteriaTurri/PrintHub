@@ -1,9 +1,20 @@
 from django.contrib import admin
 from django.urls import path
 
-from hub import views
+from hub import operations, views
 
 urlpatterns = [
+    path("admin/operations/", operations.dashboard, name="operations"),
+    path(
+        "admin/operations/<int:tenant_id>/<str:job_id>/cancel/",
+        operations.cancel,
+        name="operations-cancel",
+    ),
+    path(
+        "admin/operations/<int:tenant_id>/<str:job_id>/reprint/",
+        operations.reprint,
+        name="operations-reprint",
+    ),
     path("admin/", admin.site.urls),
     path("api/v1/profiles", views.profiles, name="api-profiles"),
     path("api/v1/jobs", views.jobs, name="api-jobs"),
