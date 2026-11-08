@@ -119,7 +119,8 @@ prova la consegna né la stampa. Housekeeping elimina gli eventi oltre
 storage e channel layer e restituisce 503 se una dipendenza non risponde. Il
 probe è isolato in un processo terminato dopo `PRINTHUB_READINESS_TIMEOUT`
 secondi (default 3): configurare intervalli dei probe adeguati al costo di
-avvio. Usare un supervisore per la liveness e monitorare separatamente la
+avvio. Il risultato è conservato in memoria per cinque secondi per processo;
+una verifica già in corso limita le richieste contemporanee. Usare un supervisore per la liveness e monitorare separatamente la
 readiness. Eseguire `manage.py housekeeping` via cron almeno ogni ora; lo stato
 admin segnala manutenzione oltre `PRINTHUB_HOUSEKEEPING_STALE_AFTER` secondi
 (default tre ore), senza compromettere la readiness.
