@@ -275,3 +275,44 @@ class LavoriBloccatiTests(ServicesTestCase):
         services.update_job(self.agent, job.id, Job.State.COMPLETED)
         job.refresh_from_db()
         self.assertFalse(job.is_stalled)
+
+    def test_confine_e_filtro_admin(self):
+        from unittest.mock import patch
+
+        from django.contrib import admin
+        from django.test import RequestFactory
+
+        from hub.admin import JobAdmin, StalledFilter
+
+        job = self.job()
+        now = timezone.now()
+        Job.objects.filter(pk=job.pk).update(
+            state=Job.State.DISPATCHED, agent_seen_at=now - timedelta(seconds=300)
+        )
+        job.refresh_from_db()
+        with (
+            self.settings(PRINTHUB_JOB_STALLED_AFTER=300),
+            patch("hub.models.timezone.now", return_value=now),
+        ):
+            self.assertFalse(job.is_stalled)
+            self.assertFalse(
+                Job.objects.filter(pk=job.pk).filter(Job.stalled_filter()).exists()
+            )
+            Job.objects.filter(pk=job.pk).update(
+                agent_seen_at=now - timedelta(seconds=301)
+            )
+            request = RequestFactory().get("/admin/", {"stalled": "yes"})
+            filter_ = StalledFilter(
+                request, request.GET.copy(), Job, JobAdmin(Job, admin.site)
+            )
+            self.assertTrue(
+                filter_.queryset(request, Job.objects.all()).filter(pk=job.pk).exists()
+            )
+            Job.objects.filter(pk=job.pk).update(state=Job.State.QUEUED)
+            self.assertFalse(
+                filter_.queryset(request, Job.objects.all()).filter(pk=job.pk).exists()
+            )
+            Job.objects.filter(pk=job.pk).update(state=Job.State.COMPLETED)
+            self.assertFalse(
+                filter_.queryset(request, Job.objects.all()).filter(pk=job.pk).exists()
+            )
