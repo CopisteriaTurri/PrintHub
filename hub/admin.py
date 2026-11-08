@@ -8,7 +8,18 @@ from django.contrib import admin
 from django.utils import timezone
 
 from . import notify
-from .models import Agent, ApiKey, Job, JobEvent, MaintenanceStatus, Profile, Tenant
+from .models import (
+    Agent,
+    ApiKey,
+    Job,
+    JobEvent,
+    MaintenanceStatus,
+    Profile,
+    Tenant,
+    WebhookAttempt,
+    WebhookDelivery,
+    WebhookDestination,
+)
 
 
 @admin.register(Tenant)
@@ -162,6 +173,58 @@ class MaintenanceStatusAdmin(admin.ModelAdmin):
     @admin.display(boolean=True, description="manutenzione in ritardo")
     def is_stale(self, obj):
         return obj.stale
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+class SuperuserOnlyAdmin(admin.ModelAdmin):
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+
+@admin.register(WebhookDestination)
+class WebhookDestinationAdmin(SuperuserOnlyAdmin):
+    list_display = ["name", "tenant", "api_key", "enabled"]
+
+
+class WebhookAttemptInline(admin.TabularInline):
+    model = WebhookAttempt
+    fields = ["timestamp", "result"]
+    readonly_fields = fields
+    can_delete = False
+    extra = 0
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(WebhookDelivery)
+class WebhookDeliveryAdmin(SuperuserOnlyAdmin):
+    list_display = ["event", "destination", "attempts", "result", "next_attempt_at"]
+    inlines = [WebhookAttemptInline]
+    readonly_fields = [f.name for f in WebhookDelivery._meta.fields]
 
     def has_add_permission(self, request):
         return False

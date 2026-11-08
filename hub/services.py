@@ -259,9 +259,13 @@ def _existing_for_key(api_key, idempotency_key, request_hash):
 
 
 def record_event(job, kind, source, details=None):
-    return JobEvent.objects.create(
+    event = JobEvent.objects.create(
         job=job, kind=kind, source=source, details=details or {}
     )
+    from .webhooks import enqueue_final
+
+    enqueue_final(event)
+    return event
 
 
 def create_job(api_key, idempotency_key, upload, meta):
@@ -790,7 +794,7 @@ def purge_events():
     count = 0
     while True:
         ids = list(
-            JobEvent.objects.filter(timestamp__lt=cutoff)
+            JobEvent.objects.filter(timestamp__lt=cutoff, deliveries__isnull=True)
             .order_by("pk")
             .values_list("pk", flat=True)[:1000]
         )
