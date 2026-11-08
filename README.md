@@ -89,3 +89,11 @@ Test, formattazione e lint:
 - Dietro cloudflared, HTTPS e WebSocket (`wss://`) passano senza configurazioni particolari.
 - **Solo LAN su `http://`**: `PRINTHUB_SECURE_COOKIES=False`, altrimenti il browser non rimanda il cookie di sessione e il login all'admin fallisce. Client e agenti non usano cookie: per loro non cambia niente. Gli agenti in questo caso vogliono `allow_insecure = true` in `agent.toml`.
 - **Versione**: il builder passa `--build-arg APP_VERSION=$(git describe --tags --always)`; si vede nell'header dell'admin e in `/healthz`.
+
+### Presenza degli agenti
+
+Un agente è online se non revocato, ha una connessione registrata e ha dato
+riscontro negli ultimi `PRINTHUB_AGENT_OFFLINE_AFTER` secondi (default: tre
+intervalli di heartbeat). Al limite esatto è ancora online. Il margine tollera
+ritardi temporanei; dopo un arresto improvviso la presenza scade anche se il
+canale è rimasto registrato, e si ripristina al successivo contatto.

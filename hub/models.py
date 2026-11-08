@@ -4,6 +4,9 @@ Tutto appartiene a un Tenant: ogni query parte dal tenant della credenziale
 usata, così un cliente dell'hub non può mai vedere i dati di un altro.
 """
 
+from datetime import timedelta
+
+from django.conf import settings
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
@@ -115,7 +118,13 @@ class Agent(models.Model):
 
     @property
     def online(self):
-        return bool(self.channel_name)
+        return bool(
+            self.channel_name
+            and not self.revoked_at
+            and self.last_seen_at
+            and self.last_seen_at
+            >= timezone.now() - timedelta(seconds=settings.PRINTHUB_AGENT_OFFLINE_AFTER)
+        )
 
 
 class Profile(models.Model):
