@@ -8,7 +8,7 @@ from django.contrib import admin
 from django.utils import timezone
 
 from . import notify
-from .models import Agent, ApiKey, Job, JobEvent, Profile, Tenant
+from .models import Agent, ApiKey, Job, JobEvent, MaintenanceStatus, Profile, Tenant
 
 
 @admin.register(Tenant)
@@ -152,3 +152,22 @@ class JobAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False  # lo storico non si modifica a mano
+
+
+@admin.register(MaintenanceStatus)
+class MaintenanceStatusAdmin(admin.ModelAdmin):
+    list_display = ["last_attempt_at", "last_success_at", "failed", "is_stale"]
+    readonly_fields = [f.name for f in MaintenanceStatus._meta.fields]
+
+    @admin.display(boolean=True, description="manutenzione in ritardo")
+    def is_stale(self, obj):
+        return obj.stale
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

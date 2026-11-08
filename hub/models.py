@@ -274,3 +274,22 @@ class JobEvent(models.Model):
         ]
         verbose_name = "evento lavoro"
         verbose_name_plural = "eventi lavoro"
+
+
+class MaintenanceStatus(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    expired_count = models.PositiveIntegerField(default=0)
+    purged_count = models.PositiveIntegerField(default=0)
+    events_count = models.PositiveIntegerField(default=0)
+    failed = models.BooleanField(default=False)
+
+    @property
+    def stale(self):
+        return (
+            not self.last_success_at
+            or self.last_success_at
+            < timezone.now()
+            - timedelta(seconds=settings.PRINTHUB_HOUSEKEEPING_STALE_AFTER)
+        )

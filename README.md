@@ -112,3 +112,14 @@ Il dettaglio admin mostra eventi registrati dall'hub a partire dall'attivazione
 della funzione. Gli orari sono quelli dell'hub; un tentativo di offerta non
 prova la consegna né la stampa. Housekeeping elimina gli eventi oltre
 `PRINTHUB_EVENT_RETENTION_DAYS` giorni (default 90), senza eliminare i lavori.
+
+### Salute e manutenzione
+
+`/healthz` indica che il processo HTTP risponde; `/readyz` controlla database,
+storage e channel layer e restituisce 503 se una dipendenza non risponde. Il
+probe è isolato in un processo terminato dopo `PRINTHUB_READINESS_TIMEOUT`
+secondi (default 3): configurare intervalli dei probe adeguati al costo di
+avvio. Usare un supervisore per la liveness e monitorare separatamente la
+readiness. Eseguire `manage.py housekeeping` via cron almeno ogni ora; lo stato
+admin segnala manutenzione oltre `PRINTHUB_HOUSEKEEPING_STALE_AFTER` secondi
+(default tre ore), senza compromettere la readiness.

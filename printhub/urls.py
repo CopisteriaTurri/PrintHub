@@ -13,4 +13,5 @@ urlpatterns = [
         "agent/v1/jobs/<str:job_id>/file", views.agent_job_file, name="agent-job-file"
     ),
     path("healthz", views.healthz, name="healthz"),
+    path("readyz", views.readyz, name="readyz"),
 ]
