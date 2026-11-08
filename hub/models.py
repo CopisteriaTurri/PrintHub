@@ -213,6 +213,7 @@ class Job(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     expires_at = models.DateTimeField()
+    agent_seen_at = models.DateTimeField(null=True, blank=True, editable=False)
     # Ultima volta che il lavoro è stato proposto all'agente (job.offer).
     offered_at = models.DateTimeField(null=True, blank=True)
 
@@ -235,6 +236,32 @@ class Job(models.Model):
 
     def __str__(self):
         return self.id
+
+    # Stati che possono risultare bloccati: l'agente li ha in carico ma non
+    # dà riscontri da oltre la soglia.
+    STALLED_STATES = (State.DISPATCHED, State.SPOOLED)
+
+    @classmethod
+    def stalled_cutoff(cls, now=None):
+        """Prima di questo istante l'ultimo riscontro è troppo vecchio."""
+        return (now or timezone.now()) - timedelta(
+            seconds=settings.PRINTHUB_JOB_STALLED_AFTER
+        )
+
+    @classmethod
+    def stalled_filter(cls, now=None):
+        cutoff = cls.stalled_cutoff(now)
+        return Q(state__in=cls.STALLED_STATES) & (
+            Q(agent_seen_at__lt=cutoff)
+            | Q(agent_seen_at__isnull=True, created_at__lt=cutoff)
+        )
+
+    @property
+    def is_stalled(self):
+        return (
+            self.state in self.STALLED_STATES
+            and (self.agent_seen_at or self.created_at) < self.stalled_cutoff()
+        )
 
     @property
     def is_final(self):

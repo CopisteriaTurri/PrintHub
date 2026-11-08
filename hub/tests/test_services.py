@@ -244,3 +244,75 @@ class PresenzaTests(ServicesTestCase):
         services.agent_disconnected(self.agent, "vecchio")
         self.agent.refresh_from_db()
         self.assertEqual(self.agent.channel_name, "nuovo")
+
+
+class LavoriBloccatiTests(ServicesTestCase):
+    def test_riscontro_duplicato_e_messaggio_invalido(self):
+        job = self.job()
+        services.update_job(self.agent, job.id, Job.State.DISPATCHED)
+        vecchio = timezone.now() - timedelta(seconds=301)
+        Job.objects.filter(pk=job.pk).update(agent_seen_at=vecchio)
+        job.refresh_from_db()
+        self.assertTrue(job.is_stalled)
+        self.assertTrue(
+            Job.objects.filter(pk=job.pk).filter(Job.stalled_filter()).exists()
+        )
+        services.update_job(self.agent, job.id, Job.State.QUEUED)
+        job.refresh_from_db()
+        self.assertEqual(job.agent_seen_at, vecchio)
+        updated_at = job.updated_at
+        services.update_job(self.agent, job.id, Job.State.DISPATCHED)
+        job.refresh_from_db()
+        self.assertFalse(job.is_stalled)
+        self.assertEqual(job.updated_at, updated_at)
+        services.update_job(self.agent, job.id, Job.State.SPOOLED)
+        Job.objects.filter(pk=job.pk).update(agent_seen_at=vecchio)
+        job.refresh_from_db()
+        self.assertTrue(job.is_stalled)
+        services.purge_files(days=-1)
+        job.refresh_from_db()
+        self.assertTrue(job.is_stalled)
+        services.update_job(self.agent, job.id, Job.State.COMPLETED)
+        job.refresh_from_db()
+        self.assertFalse(job.is_stalled)
+
+    def test_confine_e_filtro_admin(self):
+        from unittest.mock import patch
+
+        from django.contrib import admin
+        from django.test import RequestFactory
+
+        from hub.admin import JobAdmin, StalledFilter
+
+        job = self.job()
+        now = timezone.now()
+        Job.objects.filter(pk=job.pk).update(
+            state=Job.State.DISPATCHED, agent_seen_at=now - timedelta(seconds=300)
+        )
+        job.refresh_from_db()
+        with (
+            self.settings(PRINTHUB_JOB_STALLED_AFTER=300),
+            patch("hub.models.timezone.now", return_value=now),
+        ):
+            self.assertFalse(job.is_stalled)
+            self.assertFalse(
+                Job.objects.filter(pk=job.pk).filter(Job.stalled_filter()).exists()
+            )
+            Job.objects.filter(pk=job.pk).update(
+                agent_seen_at=now - timedelta(seconds=301)
+            )
+            request = RequestFactory().get("/admin/", {"stalled": "yes"})
+            filter_ = StalledFilter(
+                request, request.GET.copy(), Job, JobAdmin(Job, admin.site)
+            )
+            self.assertTrue(
+                filter_.queryset(request, Job.objects.all()).filter(pk=job.pk).exists()
+            )
+            Job.objects.filter(pk=job.pk).update(state=Job.State.QUEUED)
+            self.assertFalse(
+                filter_.queryset(request, Job.objects.all()).filter(pk=job.pk).exists()
+            )
+            Job.objects.filter(pk=job.pk).update(state=Job.State.COMPLETED)
+            self.assertFalse(
+                filter_.queryset(request, Job.objects.all()).filter(pk=job.pk).exists()
+            )

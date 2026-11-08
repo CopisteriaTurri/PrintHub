@@ -88,11 +88,29 @@ class AgentAdmin(admin.ModelAdmin):
         return False  # si creano con `manage.py create_agent`
 
 
+class StalledFilter(admin.SimpleListFilter):
+    title = "potenzialmente bloccato"
+    parameter_name = "stalled"
+
+    def lookups(self, request, model_admin):
+        return [("yes", "Sì"), ("no", "No")]
+
+    def queryset(self, request, queryset):
+        if self.value() == "yes":
+            return queryset.filter(Job.stalled_filter())
+        if self.value() == "no":
+            return queryset.exclude(Job.stalled_filter())
+        return queryset
+
+
 @admin.register(Job)
 class JobAdmin(admin.ModelAdmin):
     list_display = [
         "id",
         "state",
+        "stalled",
+        "agent_seen_at",
+        "elapsed",
         "profile_name",
         "agent",
         "title",
@@ -100,10 +118,19 @@ class JobAdmin(admin.ModelAdmin):
         "api_key",
         "created_at",
     ]
-    list_filter = ["state", "tenant", "agent", "api_key"]
+    list_filter = [StalledFilter, "state", "tenant", "agent", "api_key"]
+    list_select_related = ["agent", "api_key", "tenant"]
     search_fields = ["id", "title", "client_ref", "idempotency_key"]
     date_hierarchy = "created_at"
     readonly_fields = [f.name for f in Job._meta.fields]
+
+    @admin.display(boolean=True, description="potenzialmente bloccato")
+    def stalled(self, obj):
+        return obj.is_stalled
+
+    @admin.display(description="tempo dall’ultimo riscontro")
+    def elapsed(self, obj):
+        return timezone.now() - (obj.agent_seen_at or obj.created_at)
 
     def has_add_permission(self, request):
         return False
