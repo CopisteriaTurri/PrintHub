@@ -124,3 +124,15 @@ una verifica già in corso limita le richieste contemporanee. Usare un superviso
 readiness. Eseguire `manage.py housekeeping` via cron almeno ogni ora; lo stato
 admin segnala manutenzione oltre `PRINTHUB_HOUSEKEEPING_STALE_AFTER` secondi
 (default tre ore), senza compromettere la readiness.
+
+## Licenza
+
+Print Hub è software libero, copyleft: chiunque può usarlo, modificarlo e
+ridistribuirlo, purché le versioni derivate restino sotto la stessa licenza.
+
+Lo distribuiamo sotto GNU General Public License, versione 3 **o successiva**
+(GPL-3.0-or-later); il testo completo è nel file [LICENSE](LICENSE).
+
+Il programma è distribuito nella speranza che sia utile, ma **senza alcuna
+garanzia**, nemmeno quella implicita di commerciabilità o di idoneità a uno
+scopo particolare: vedi il testo della licenza per i dettagli.
