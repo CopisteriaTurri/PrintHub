@@ -40,6 +40,7 @@ def dashboard(request):
     tenant = request.GET.get("tenant", "")
     agent = request.GET.get("agent", "")
     state = request.GET.get("state", "")
+    recent = request.GET.get("recent", "")
     if tenant:
         if not tenant.isdecimal() or not Tenant.objects.filter(pk=tenant).exists():
             return HttpResponseBadRequest("Tenant non valido")
@@ -52,6 +53,9 @@ def dashboard(request):
         if state not in Job.State.values:
             return HttpResponseBadRequest("Stato non valido")
         jobs = jobs.filter(state=state)
+    # Filtro "errori recenti": lo stesso taglio temporale del riepilogo.
+    if recent:
+        jobs = jobs.filter(updated_at__gte=timezone.now() - ERROR_WINDOW)
     # La presenza segue gli stessi filtri dei lavori; le opzioni dei select
     # restano su tutti gli agenti, altrimenti dopo un filtro non si torna indietro.
     agents = Agent.objects.select_related("tenant")
@@ -78,6 +82,7 @@ def dashboard(request):
         "selected_tenant": tenant,
         "selected_agent": agent,
         "selected_state": state,
+        "selected_recent": recent,
     }
     return render(request, "admin/hub/operations.html", context)
 

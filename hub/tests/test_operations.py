@@ -126,8 +126,13 @@ class OperationsTests(TempMediaMixin, TestCase):
         self.assertContains(response, "Falliti (ultime 24 h): 1")
         self.assertContains(
             response,
-            f"?tenant={self.w['tenant'].pk}&amp;agent=&amp;state=failed",
+            f"?tenant={self.w['tenant'].pk}&amp;agent=&amp;state=failed&amp;recent=1",
         )
+        response = self.client.get(
+            reverse("operations"),
+            {"tenant": self.w["tenant"].pk, "state": "failed", "recent": "1"},
+        )
+        self.assertEqual([job.pk for job in response.context["jobs"]], [recente.pk])
 
     def test_ristampa_idempotente_file_indipendente_e_key_revocata(self):
         self.client.force_login(self.superuser)
@@ -163,10 +168,15 @@ class OperationsTests(TempMediaMixin, TestCase):
         self.assertEqual(Job.objects.count(), 2)
         self.assertContains(response, "Nessun agente offre il profilo «fattura»")
 
+        token = self._token()
         self.job.file.delete(save=False)
         self.job.file_purged_at = timezone.now()
         self.job.save(update_fields=["file", "file_purged_at"])
-        response = self.client.post(self.url, {"token": self._token()}, follow=True)
+        response = self.client.get(self.url)
+        self.assertContains(response, "Il file originale non è più disponibile")
+        self.assertNotContains(response, 'name="token"')
+        # Il controllo POST resta: il file può sparire dopo il caricamento pagina.
+        response = self.client.post(self.url, {"token": token}, follow=True)
         self.assertEqual(Job.objects.count(), 2)
         self.assertContains(response, "Il file originale non è più disponibile.")
 

@@ -782,7 +782,9 @@ def purge_files(days=None):
     ).exclude(file=""):
         job.file.delete(save=False)
         job.file_purged_at = timezone.now()
-        job.save(update_fields=["file", "file_purged_at", "updated_at"])
+        # `updated_at` è l'ultima transizione di stato: la pulizia dei file non
+        # deve farla sembrare recente nella dashboard.
+        job.save(update_fields=["file", "file_purged_at"])
         count += 1
     return count
 

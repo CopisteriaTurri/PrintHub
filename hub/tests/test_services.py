@@ -187,9 +187,12 @@ class PurgeTests(ServicesTestCase):
             created_at=timezone.now() - timedelta(days=8)
         )
         path = old.file.path
+        updated_at = old.updated_at
         self.assertEqual(services.purge_files(days=7), 1)
         old.refresh_from_db()
         self.assertIsNotNone(old.file_purged_at)
+        # La pulizia non è una transizione di stato: `updated_at` resta dov'è.
+        self.assertEqual(old.updated_at, updated_at)
         self.assertFalse(old.file)
         import os
 
