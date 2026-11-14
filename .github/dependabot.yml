@@ -13,6 +13,10 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      # Django resta sulla 5.2 LTS: i major 6.x non si aggiornano in automatico.
+      - dependency-name: "django"
+        update-types: ["version-update:semver-major"]
     groups:
       # Un solo PR per gli aggiornamenti minori e di patch: Django, Channels e
       # il resto vanno verificati insieme, perché condividono il resolver.
