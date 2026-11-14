@@ -112,3 +112,15 @@ Il dettaglio admin mostra eventi registrati dall'hub a partire dall'attivazione
 della funzione. Gli orari sono quelli dell'hub; un tentativo di offerta non
 prova la consegna né la stampa. Housekeeping elimina gli eventi oltre
 `PRINTHUB_EVENT_RETENTION_DAYS` giorni (default 90), senza eliminare i lavori.
+
+## Licenza
+
+Print Hub è software libero, copyleft: chiunque può usarlo, modificarlo e
+ridistribuirlo, purché le versioni derivate restino sotto la stessa licenza.
+
+Lo distribuiamo sotto GNU General Public License, versione 3 **o successiva**
+(GPL-3.0-or-later); il testo completo è nel file [LICENSE](LICENSE).
+
+Il programma è distribuito nella speranza che sia utile, ma **senza alcuna
+garanzia**, nemmeno quella implicita di commerciabilità o di idoneità a uno
+scopo particolare: vedi il testo della licenza per i dettagli.
