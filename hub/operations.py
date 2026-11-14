@@ -1,6 +1,7 @@
 """Operazioni admin riservate ai superuser."""
 
 import uuid
+from datetime import timedelta
 from functools import wraps
 
 from django.contrib import admin, messages
@@ -10,10 +11,15 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.http import HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from . import services
 from .models import Agent, Job, MaintenanceStatus, Tenant
+
+# Finestra degli errori mostrati nel riepilogo: `updated_at` è l'ultima
+# transizione di stato, non esiste un campo dedicato alla chiusura.
+ERROR_WINDOW = timedelta(hours=24)
 
 
 def superuser(view):
@@ -63,7 +69,11 @@ def dashboard(request):
         "states": Job.State.choices,
         "queued": jobs.filter(state=Job.State.QUEUED).count(),
         "stalled": jobs.filter(Job.stalled_filter()).count(),
-        "errors": jobs.filter(state=Job.State.FAILED).count(),
+        "errors": jobs.filter(
+            state=Job.State.FAILED,
+            updated_at__gte=timezone.now() - ERROR_WINDOW,
+        ).count(),
+        "errors_hours": int(ERROR_WINDOW.total_seconds() // 3600),
         "maintenance": MaintenanceStatus.objects.first(),
         "selected_tenant": tenant,
         "selected_agent": agent,

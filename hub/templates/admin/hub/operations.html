@@ -1,6 +1,6 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
-<p>In coda: {{ queued }} · Potenzialmente bloccati: {{ stalled }} · Falliti: {{ errors }}</p>
+<p>In coda: {{ queued }} · Potenzialmente bloccati: {{ stalled }} · <a href="?tenant={{ selected_tenant }}&amp;agent={{ selected_agent }}&amp;state=failed">Falliti (ultime {{ errors_hours }} h): {{ errors }}</a></p>
 <p>Manutenzione: {% if maintenance %}{% if maintenance.stale %}in ritardo{% else %}regolare{% endif %}; ultimo successo {{ maintenance.last_success_at|default:"mai" }}{% else %}mai eseguita{% endif %}</p>
 <h2>Agenti</h2><ul>{% for agent in agents %}<li>{{ agent.tenant }} / {{ agent.name }}: {% if agent.online %}online{% else %}offline{% endif %}; ultimo contatto {{ agent.last_seen_at|default:"mai" }}</li>{% endfor %}</ul>
 <form method="get"><label>Tenant <select name="tenant"><option value="">Tutti</option>{% for t in tenants %}<option value="{{ t.pk }}" {% if selected_tenant == t.pk|stringformat:"s" %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>

@@ -1,4 +1,5 @@
 import re
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -100,6 +101,33 @@ class OperationsTests(TempMediaMixin, TestCase):
         self.assertNotIn("pc-altro-tenant", self._presenza(response))
         response = self.client.get(reverse("operations"))
         self.assertIn("pc-altro-tenant", self._presenza(response))
+
+    def test_errori_recenti_finestra_e_link_al_filtro(self):
+        recente, _ = services.create_job(
+            self.w["key"],
+            "errore-recente",
+            SimpleUploadedFile("x.pdf", PDF),
+            {"profile": "fattura"},
+        )
+        Job.objects.filter(pk=recente.pk).update(state=Job.State.FAILED)
+        vecchio, _ = services.create_job(
+            self.w["key"],
+            "errore-vecchio",
+            SimpleUploadedFile("x.pdf", PDF),
+            {"profile": "fattura"},
+        )
+        Job.objects.filter(pk=vecchio.pk).update(
+            state=Job.State.FAILED, updated_at=timezone.now() - timedelta(hours=48)
+        )
+        self.client.force_login(self.superuser)
+        response = self.client.get(
+            reverse("operations"), {"tenant": self.w["tenant"].pk}
+        )
+        self.assertContains(response, "Falliti (ultime 24 h): 1")
+        self.assertContains(
+            response,
+            f"?tenant={self.w['tenant'].pk}&amp;agent=&amp;state=failed",
+        )
 
     def test_ristampa_idempotente_file_indipendente_e_key_revocata(self):
         self.client.force_login(self.superuser)
