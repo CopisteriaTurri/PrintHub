@@ -196,3 +196,6 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": "INFO"},
 }
+
+PRINTHUB_READINESS_TIMEOUT = float(os.environ.get("PRINTHUB_READINESS_TIMEOUT", 3))
+PRINTHUB_HOUSEKEEPING_STALE_AFTER = env_int("PRINTHUB_HOUSEKEEPING_STALE_AFTER", 10800)

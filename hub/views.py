@@ -107,3 +107,11 @@ def agent_job_file(request, job_id):
 @require_GET
 def healthz(request):
     return JsonResponse({"status": "ok", "version": APP_VERSION})
+
+
+@require_GET
+def readyz(request):
+    result = services.readiness()
+    return JsonResponse(
+        {"status": "ok" if result else "unavailable"}, status=200 if result else 503
+    )
