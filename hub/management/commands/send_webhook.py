@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from hub.models import WebhookDelivery
-from hub.webhooks import send
+from hub.webhooks import EXIT_PERMANENT, send
 
 
 class Command(BaseCommand):
@@ -24,4 +24,7 @@ class Command(BaseCommand):
         )
         if not item:
             raise SystemExit(1)
-        raise SystemExit(send(item))
+        code = send(item)
+        # 1 di `send()` significa "errore permanente del ricevente"; un crash
+        # del comando esce con 1, quindi il worker deve poterli distinguere.
+        raise SystemExit(EXIT_PERMANENT if code == 1 else code)

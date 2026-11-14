@@ -23,6 +23,12 @@ from django.utils import timezone
 from .models import Job, WebhookAttempt, WebhookDelivery, WebhookDestination
 from .services import iso
 
+# Codici di uscita del processo figlio che invia la consegna: 0 successo,
+# EXIT_TEMPORARY da ritentare, EXIT_PERMANENT senza retry. Qualunque altra
+# uscita (avvio fallito, crash) vale come temporanea e viene ritentata.
+EXIT_TEMPORARY = 75
+EXIT_PERMANENT = 10
+
 
 def validate_destination(url, secret_ref):
     try:
@@ -51,7 +57,10 @@ def validate_destination(url, secret_ref):
 
 def enqueue_final(event):
     job = event.job
-    if event.kind != "state_changed" or job.state not in Job.FINAL_STATES:
+    # Lo stato viene dall'evento, non dal lavoro: l'outbox descrive la
+    # transizione registrata (details["to"]), non lo stato corrente.
+    state = event.details.get("to")
+    if event.kind != "state_changed" or state not in Job.FINAL_STATES:
         return
     destinations = WebhookDestination.objects.filter(
         tenant_id=job.tenant_id, enabled=True
@@ -59,11 +68,11 @@ def enqueue_final(event):
     payload = {
         "version": 1,
         "event_id": str(event.pk),
-        "event_type": "job." + job.state,
+        "event_type": "job." + str(state),
         "timestamp": iso(event.timestamp),
         "job_id": job.pk,
         "client_ref": job.client_ref,
-        "state": job.state,
+        "state": str(state),
         "error": {"code": job.error_code} if job.error_code else None,
     }
     WebhookDelivery.objects.bulk_create(
@@ -124,7 +133,7 @@ def deliver_once():
         )
         code = result.returncode
     except (subprocess.TimeoutExpired, OSError):
-        code = 75
+        code = EXIT_TEMPORARY
     delivery = WebhookDelivery.objects.filter(
         pk=pk, lease_token=token, completed_at__isnull=True, failed_at__isnull=True
     ).first()
@@ -139,12 +148,12 @@ def deliver_once():
         "result": (
             "successo"
             if code == 0
-            else "errore temporaneo" if code == 75 else "errore permanente"
+            else "errore permanente" if code == EXIT_PERMANENT else "errore temporaneo"
         ),
     }
     if code == 0:
         values["completed_at"] = now
-    elif code != 75 or attempts >= settings.PRINTHUB_WEBHOOK_MAX_ATTEMPTS:
+    elif code == EXIT_PERMANENT or attempts >= settings.PRINTHUB_WEBHOOK_MAX_ATTEMPTS:
         values["failed_at"] = now
     else:
         values["next_attempt_at"] = now + timedelta(
@@ -177,7 +186,8 @@ def send(delivery):
         parts = validate_destination(destination.url, destination.secret_ref)
         secret = os.environ.get(destination.secret_ref, "")
         if not secret:
-            return 1
+            # Configurazione mancante: si ritenta, non si brucia la consegna.
+            return EXIT_TEMPORARY
         addresses = {
             item[4][0]
             for item in socket.getaddrinfo(parts.hostname, 443, type=socket.SOCK_STREAM)
@@ -216,10 +226,12 @@ def send(delivery):
             return 75 if response.status == 429 or response.status >= 500 else 1
         finally:
             connection.close()
-    except (OSError, TimeoutError, http.client.HTTPException):
-        return 75
     except (ValueError, ssl.SSLError):
+        # Prima di OSError: SSLError ne è una sottoclasse, un certificato non
+        # valido è un errore permanente del ricevente, non un timeout di rete.
         return 1
+    except (OSError, TimeoutError, http.client.HTTPException):
+        return EXIT_TEMPORARY
 
 
 def purge_deliveries():

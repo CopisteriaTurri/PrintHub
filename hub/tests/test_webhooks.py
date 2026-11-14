@@ -1,9 +1,11 @@
 import hashlib
 import hmac
 import json
+import ssl
 from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.db import transaction
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -214,3 +216,46 @@ class WebhookTests(TempMediaMixin, TestCase):
         item.refresh_from_db()
         self.assertIsNotNone(item.completed_at)
         self.assertEqual(item.attempt_log.count(), 1)
+
+    def test_segreto_mancante_temporaneo_e_certificato_permanente(self):
+        item = self.finish()
+        with mock.patch.dict("os.environ", {"PRINTHUB_WEBHOOK_SECRET_TEST": ""}):
+            self.assertEqual(webhooks.send(item), webhooks.EXIT_TEMPORARY)
+        connection = mock.Mock()
+        connection.request.side_effect = ssl.SSLCertVerificationError("certificato")
+        with (
+            mock.patch.dict("os.environ", {"PRINTHUB_WEBHOOK_SECRET_TEST": "secret"}),
+            mock.patch(
+                "socket.getaddrinfo", return_value=[(2, 1, 6, "", ("8.8.8.8", 443))]
+            ),
+            mock.patch("hub.webhooks.PinnedHTTPSConnection", return_value=connection),
+        ):
+            self.assertEqual(webhooks.send(item), 1)
+
+    def test_uscita_anomala_del_figlio_e_temporanea(self):
+        item = self.finish()
+        with mock.patch("hub.webhooks.subprocess.run") as run:
+            run.return_value.returncode = 1  # il figlio non è partito
+            self.assertTrue(webhooks.deliver_once())
+        item.refresh_from_db()
+        self.assertIsNone(item.failed_at)
+        self.assertEqual(item.result, "errore temporaneo")
+        item.next_attempt_at = timezone.now()
+        item.save(update_fields=["next_attempt_at"])
+        with mock.patch("hub.webhooks.subprocess.run") as run:
+            run.return_value.returncode = webhooks.EXIT_PERMANENT
+            self.assertTrue(webhooks.deliver_once())
+        item.refresh_from_db()
+        self.assertIsNotNone(item.failed_at)
+        self.assertEqual(item.result, "errore permanente")
+
+    def test_comando_figlio_segnala_il_permanente(self):
+        item = self.finish()
+        WebhookDelivery.objects.filter(pk=item.pk).update(
+            lease_token="token",
+            lease_until=timezone.now() + timezone.timedelta(seconds=60),
+        )
+        with mock.patch("hub.management.commands.send_webhook.send", return_value=1):
+            with self.assertRaises(SystemExit) as exit_:
+                call_command("send_webhook", item.pk, "token")
+        self.assertEqual(exit_.exception.code, webhooks.EXIT_PERMANENT)
