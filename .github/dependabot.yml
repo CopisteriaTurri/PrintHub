@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Dipendenze Python: requirements.txt e requirements-dev.txt (che lo include).
+  # L'ecosistema "uv" non serve qui, uv crea solo il venv locale; le immagini
+  # Docker installano da requirements.txt.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Rome"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      # Django resta sulla 5.2 LTS: i major 6.x non si aggiornano in automatico.
+      - dependency-name: "django"
+        update-types: ["version-update:semver-major"]
+    groups:
+      # Un solo PR per gli aggiornamenti minori e di patch: Django, Channels e
+      # il resto vanno verificati insieme, perché condividono il resolver.
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

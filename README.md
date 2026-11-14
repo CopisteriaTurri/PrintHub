@@ -134,3 +134,15 @@ all'elenco filtrato. La ristampa richiede conferma esplicita, controlla profilo,
 opzioni e API key originale, e crea un file indipendente; reinviare la stessa
 conferma non duplica il lavoro. Una richiesta di annullamento nello spooler
 attende il riscontro dell'agente: verificare la stampante prima di ristampare.
+ 
+## Licenza
+
+Print Hub è software libero, copyleft: chiunque può usarlo, modificarlo e
+ridistribuirlo, purché le versioni derivate restino sotto la stessa licenza.
+
+Lo distribuiamo sotto GNU General Public License, versione 3 **o successiva**
+(GPL-3.0-or-later); il testo completo è nel file [LICENSE](LICENSE).
+
+Il programma è distribuito nella speranza che sia utile, ma **senza alcuna
+garanzia**, nemmeno quella implicita di commerciabilità o di idoneità a uno
+scopo particolare: vedi il testo della licenza per i dettagli.

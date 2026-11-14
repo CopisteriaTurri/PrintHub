@@ -21,7 +21,10 @@ def ready():
     now = time.monotonic()
     if now - _cached_at < 5:
         return _cached_result
-    if not _lock.acquire(blocking=False):
+    # Aspetta che l'eventuale probe in corso finisca (non può durare più del
+    # suo timeout) e riusa il suo risultato dalla cache. Se la scadenza passa
+    # senza lock, resta non pronto come prima.
+    if not _lock.acquire(timeout=settings.PRINTHUB_READINESS_TIMEOUT + 1):
         return False
     try:
         now = time.monotonic()

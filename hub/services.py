@@ -18,6 +18,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from . import notify, tokens
+from . import readiness as _readiness
 from .models import Agent, ApiKey, Job, JobEvent, Profile
 
 log = logging.getLogger(__name__)
@@ -787,6 +788,11 @@ def purge_files(days=None):
         job.save(update_fields=["file", "file_purged_at"])
         count += 1
     return count
+
+
+def readiness():
+    """Prontezza delle dipendenze: il probe vero e proprio vive in `readiness`."""
+    return _readiness.ready()
 
 
 def purge_events():
