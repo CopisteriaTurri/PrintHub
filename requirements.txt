@@ -1,5 +1,5 @@
 Django>=5.2.18,<5.3
-channels>=4.3,<5
+channels>=4.3.2,<5
 channels-redis>=4.3,<5
 uvicorn[standard]>=0.54,<1
 whitenoise>=6.12,<7
