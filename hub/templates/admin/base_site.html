@@ -14,3 +14,8 @@
   {% include "admin/color_theme_toggle.html" %}
 {% endif %}
 {% endblock %}
+
+{% block nav-global %}
+{{ block.super }}
+{% if user.is_superuser %}<a href="{% url 'operations' %}">Dashboard operativa</a>{% endif %}
+{% endblock %}
