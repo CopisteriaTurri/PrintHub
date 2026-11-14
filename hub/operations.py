@@ -46,12 +46,20 @@ def dashboard(request):
         if state not in Job.State.values:
             return HttpResponseBadRequest("Stato non valido")
         jobs = jobs.filter(state=state)
+    # La presenza segue gli stessi filtri dei lavori; le opzioni dei select
+    # restano su tutti gli agenti, altrimenti dopo un filtro non si torna indietro.
+    agents = Agent.objects.select_related("tenant")
+    if tenant:
+        agents = agents.filter(tenant_id=tenant)
+    if agent:
+        agents = agents.filter(pk=agent)
     context = {
         **admin.site.each_context(request),
         "title": "Operatività",
         "jobs": Paginator(jobs, 30).get_page(request.GET.get("page")),
         "tenants": Tenant.objects.all(),
-        "agents": Agent.objects.select_related("tenant"),
+        "agents": agents,
+        "agent_choices": Agent.objects.select_related("tenant"),
         "states": Job.State.choices,
         "queued": jobs.filter(state=Job.State.QUEUED).count(),
         "stalled": jobs.filter(Job.stalled_filter()).count(),
@@ -135,6 +143,7 @@ def reprint(request, tenant_id, job_id):
                 "reprint-" + data["nonce"],
                 SimpleUploadedFile("reprint", contents),
                 meta,
+                source="admin",
             )
             if created:
                 services.record_event(

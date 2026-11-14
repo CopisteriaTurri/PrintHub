@@ -264,9 +264,11 @@ def record_event(job, kind, source, details=None):
     )
 
 
-def create_job(api_key, idempotency_key, upload, meta):
+def create_job(api_key, idempotency_key, upload, meta, source="client"):
     """Crea un lavoro. Restituisce (job, created): `created` è False quando la
-    stessa richiesta era già arrivata (stessa Idempotency-Key e stesso contenuto)."""
+    stessa richiesta era già arrivata (stessa Idempotency-Key e stesso contenuto).
+
+    `source` è chi ha originato il lavoro (`client` o, per una ristampa, `admin`)."""
     if not idempotency_key or len(idempotency_key) > 128:
         raise HubError(
             "invalid_request", "header Idempotency-Key obbligatorio (max 128 caratteri)"
@@ -365,7 +367,7 @@ def create_job(api_key, idempotency_key, upload, meta):
                 f"{job.id}.{_EXTENSIONS[mime]}", ContentFile(data), save=False
             )
             job.save(force_insert=True)
-            record_event(job, "created", "client", {"state": job.state})
+            record_event(job, "created", source, {"state": job.state})
             transaction.on_commit(lambda: notify.job_created(job))
     except IntegrityError:
         # Due richieste identiche in parallelo: ha vinto l'altra.
