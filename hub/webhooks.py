@@ -31,8 +31,10 @@ from .models import WebhookAttempt, WebhookDelivery
 EXIT_TEMPORARY = 75
 EXIT_PERMANENT = 10
 
-# Il processo figlio ha SEND_TIMEOUT secondi in tutto: la ricerca di un indirizzo
-# raggiungibile ne usa al massimo CONNECT_BUDGET, il resto va a TLS e risposta.
+# Il processo figlio ha SEND_TIMEOUT secondi in tutto, compresi avvio, DNS, TLS e
+# risposta. I tentativi di connessione ne usano al massimo CONNECT_BUDGET, così
+# gli indirizzi in timeout non consumano tutto il tempo; se il figlio supera
+# comunque SEND_TIMEOUT viene terminato e la consegna si ritenta.
 SEND_TIMEOUT = 20
 CONNECT_BUDGET = 10
 

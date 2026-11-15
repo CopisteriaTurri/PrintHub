@@ -238,9 +238,11 @@ della firma è nel README; qui c'è il percorso.
   globale per rifiutare tutto (difesa dal DNS rebinding);
   `PinnedHTTPSConnection` si collega solo agli indirizzi validati, con il
   certificato verificato sull'hostname. Li prova alternando IPv6 e IPv4
-  (`attempt_order`, la partenza ruota a ogni retry) entro `CONNECT_BUDGET`
-  (10 s su 20 del figlio): un IPv6 rotto che va in timeout non esaurisce il
-  tempo prima di arrivare a un IPv4. I redirect non si
+  (`attempt_order`, la partenza ruota a ogni retry) e i tentativi di
+  connessione si fermano dopo `CONNECT_BUDGET` (10 s): un IPv6 rotto che va in
+  timeout non esaurisce i 20 s del figlio prima di arrivare a un IPv4. Il tetto
+  non riserva tempo al resto (avvio, DNS, TLS, risposta): se il figlio supera
+  comunque `SEND_TIMEOUT` viene terminato e la consegna si ritenta. I redirect non si
   seguono (un 3xx è un errore permanente).
 - **Permanente o temporaneo.** Permanenti: configurazione non valida,
   certificato non valido, risposta 3xx/4xx diversa da 429, destinazione
