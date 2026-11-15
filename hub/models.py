@@ -293,6 +293,10 @@ class MaintenanceStatus(models.Model):
     events_count = models.PositiveIntegerField(default=0)
     failed = models.BooleanField(default=False)
 
+    class Meta:
+        verbose_name = "stato manutenzione"
+        verbose_name_plural = "stato manutenzione"
+
     @property
     def stale(self):
         return (
