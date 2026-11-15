@@ -236,8 +236,11 @@ della firma è nel README; qui c'è il percorso.
   sulla 443, host in `PRINTHUB_WEBHOOK_ALLOWED_HOSTS`, niente credenziali
   nell'URL. Al momento dell'invio il DNS viene risolto e basta un indirizzo non
   globale per rifiutare tutto (difesa dal DNS rebinding);
-  `PinnedHTTPSConnection` si collega solo agli indirizzi validati, provandoli
-  in ordine, con il certificato verificato sull'hostname. I redirect non si
+  `PinnedHTTPSConnection` si collega solo agli indirizzi validati, con il
+  certificato verificato sull'hostname. Li prova alternando IPv6 e IPv4
+  (`attempt_order`, la partenza ruota a ogni retry) entro `CONNECT_BUDGET`
+  (10 s su 20 del figlio): un IPv6 rotto che va in timeout non esaurisce il
+  tempo prima di arrivare a un IPv4. I redirect non si
   seguono (un 3xx è un errore permanente).
 - **Permanente o temporaneo.** Permanenti: configurazione non valida,
   certificato non valido, risposta 3xx/4xx diversa da 429, destinazione

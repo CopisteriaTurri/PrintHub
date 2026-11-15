@@ -249,7 +249,7 @@ class WebhookTests(TempMediaMixin, TestCase):
         connection = webhooks.PinnedHTTPSConnection(
             "hook.example", ["2001:4860::8888", "8.8.8.8"]
         )
-        sock = object()
+        sock = mock.Mock()
         with (
             mock.patch(
                 "socket.create_connection", side_effect=[OSError("no route"), sock]
@@ -266,6 +266,49 @@ class WebhookTests(TempMediaMixin, TestCase):
         with mock.patch("socket.create_connection", side_effect=OSError("giù")):
             with self.assertRaises(OSError):
                 connection.connect()
+
+    def test_ordine_alterna_le_famiglie_e_ruota_tra_i_retry(self):
+        addresses = {"2001:db8::1", "2001:db8::2", "2001:db8::3", "8.8.8.8", "1.1.1.1"}
+        first = webhooks.attempt_order(addresses, 0)
+        self.assertEqual(
+            first, ["2001:db8::1", "1.1.1.1", "2001:db8::2", "8.8.8.8", "2001:db8::3"]
+        )
+        self.assertEqual(webhooks.attempt_order(addresses, 1), first[1:] + first[:1])
+        self.assertEqual(webhooks.attempt_order(addresses, 5), first)
+
+    def test_connessione_dopo_un_timeout_e_tetto_complessivo(self):
+        connection = webhooks.PinnedHTTPSConnection(
+            "hook.example", ["2001:db8::1", "8.8.8.8", "1.1.1.1"]
+        )
+        clock = [100.0]
+
+        def lento(address, timeout):
+            clock[0] += timeout  # il tentativo consuma tutto il suo timeout
+            raise TimeoutError("timeout")
+
+        sock = mock.Mock()
+        with (
+            mock.patch("hub.webhooks.time.monotonic", side_effect=lambda: clock[0]),
+            mock.patch(
+                "socket.create_connection", side_effect=[TimeoutError("timeout"), sock]
+            ) as create,
+            mock.patch.object(connection._context, "wrap_socket") as wrap,
+        ):
+            connection.connect()
+        self.assertEqual(create.call_args_list[1].args[0], ("8.8.8.8", 443))
+        wrap.assert_called_once_with(sock, server_hostname="hook.example")
+        with (
+            mock.patch("hub.webhooks.time.monotonic", side_effect=lambda: clock[0]),
+            mock.patch("socket.create_connection", side_effect=lento) as create,
+        ):
+            with self.assertRaises(OSError):
+                connection.connect()
+        # 5 s + 5 s esauriscono il tetto: il terzo indirizzo non si prova.
+        self.assertEqual(create.call_count, 2)
+        self.assertLessEqual(
+            sum(c.kwargs["timeout"] for c in create.call_args_list),
+            webhooks.CONNECT_BUDGET,
+        )
 
     def test_admin_destinazione_tenant_bloccato_in_modifica(self):
         from django.contrib import admin

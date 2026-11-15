@@ -12,8 +12,10 @@ import socket
 import ssl
 import subprocess
 import sys
+import time
 import uuid
 from datetime import timedelta
+from itertools import zip_longest
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -28,6 +30,11 @@ from .models import WebhookAttempt, WebhookDelivery
 # uscita (avvio fallito, crash) vale come temporanea e viene ritentata.
 EXIT_TEMPORARY = 75
 EXIT_PERMANENT = 10
+
+# Il processo figlio ha SEND_TIMEOUT secondi in tutto: la ricerca di un indirizzo
+# raggiungibile ne usa al massimo CONNECT_BUDGET, il resto va a TLS e risposta.
+SEND_TIMEOUT = 20
+CONNECT_BUDGET = 10
 
 
 def validate_destination(url, secret_ref):
@@ -99,7 +106,7 @@ def deliver_once():
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            timeout=20,
+            timeout=SEND_TIMEOUT,
             check=False,
         )
         code = result.returncode
@@ -149,15 +156,33 @@ class PinnedHTTPSConnection(http.client.HTTPSConnection):
 
     def connect(self):
         error = None
+        deadline = time.monotonic() + CONNECT_BUDGET
         for address in self.addresses:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
             try:
-                sock = socket.create_connection((address, 443), timeout=5)
+                sock = socket.create_connection(
+                    (address, 443), timeout=min(5, remaining)
+                )
             except OSError as exc:
                 error = exc
                 continue
+            sock.settimeout(5)
             self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
             return
-        raise error or OSError("nessun indirizzo webhook disponibile")
+        raise error or OSError("nessun indirizzo webhook raggiungibile in tempo")
+
+
+def attempt_order(addresses, attempt):
+    """IPv6 e IPv4 alternati (come RFC 8305), così una famiglia irraggiungibile
+    costa di norma un solo timeout; la partenza ruota a ogni retry."""
+    by_family = ([], [])
+    for address in sorted(addresses):
+        by_family[ipaddress.ip_address(address).version == 4].append(address)
+    order = [a for pair in zip_longest(*by_family) for a in pair if a is not None]
+    shift = attempt % len(order)
+    return order[shift:] + order[:shift]
 
 
 def send(delivery):
@@ -185,7 +210,9 @@ def send(delivery):
         signature = hmac.new(
             secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256
         ).hexdigest()
-        connection = PinnedHTTPSConnection(parts.hostname, sorted(addresses))
+        connection = PinnedHTTPSConnection(
+            parts.hostname, attempt_order(addresses, delivery.attempts)
+        )
         try:
             path = parts.path or "/"
             if parts.query:
