@@ -160,7 +160,8 @@ recupero dopo un crash. È possibile una riconsegna dopo crash: deduplicare.
 
 Il corpo JSON UTF-8 versione 1 contiene `version`, `event_id`, `event_type`
 (`job.completed`, `job.failed`, `job.canceled`, `job.expired`), `timestamp`
-dell'evento UTC, `job_id`, `client_ref`, `state` ed `error` (null o codice).
+dell'evento UTC, `job_id`, `client_ref`, `state` ed `error` (`null` oppure
+`{"code": "..."}`).
 `X-PrintHub-Event` è l'ID stabile per deduplicare. `X-PrintHub-Timestamp` è il
 numero di secondi Unix del tentativo; `X-PrintHub-Signature` vale `sha256=`
 seguito dall'HMAC-SHA256 esadecimale di `timestamp + "." + corpo esatto`.

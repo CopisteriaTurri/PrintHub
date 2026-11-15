@@ -232,6 +232,21 @@ class WebhookTests(TempMediaMixin, TestCase):
         ):
             self.assertEqual(webhooks.send(item), 1)
 
+    def test_successo_senza_leggere_il_corpo(self):
+        item = self.finish()
+        connection = mock.Mock()
+        connection.getresponse.return_value.status = 200
+        connection.getresponse.return_value.read.side_effect = TimeoutError()
+        with (
+            mock.patch.dict("os.environ", {"PRINTHUB_WEBHOOK_SECRET_TEST": "secret"}),
+            mock.patch(
+                "socket.getaddrinfo", return_value=[(2, 1, 6, "", ("8.8.8.8", 443))]
+            ),
+            mock.patch("hub.webhooks.PinnedHTTPSConnection", return_value=connection),
+        ):
+            self.assertEqual(webhooks.send(item), 0)
+        connection.close.assert_called_once()
+
     def test_errore_tls_non_di_certificato_e_temporaneo(self):
         item = self.finish()
         connection = mock.Mock()

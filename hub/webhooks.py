@@ -228,8 +228,9 @@ def send(delivery):
                     "X-PrintHub-Event": str(delivery.event_id),
                 },
             )
+            # Conta solo lo stato: il corpo non serve e leggerlo potrebbe andare in
+            # timeout dopo un 200, facendo ritentare una consegna già accettata.
             response = connection.getresponse()
-            response.read(1024)
             if 200 <= response.status < 300:
                 return 0
             return 75 if response.status == 429 or response.status >= 500 else 1
