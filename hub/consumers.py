@@ -193,4 +193,8 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
         code = (
             CLOSE_REPLACED if event.get("reason") == "replaced" else CLOSE_UNAUTHORIZED
         )
+        # Il controllo periodico si ferma qui: altrimenti, prima che arrivi il
+        # `disconnect`, potrebbe chiudere una seconda volta un agente revocato.
+        if self.resync_task:
+            self.resync_task.cancel()
         await self.close(code=code)

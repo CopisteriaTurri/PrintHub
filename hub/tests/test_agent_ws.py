@@ -227,3 +227,18 @@ class ResyncTests(TempMediaMixin, TransactionTestCase):
         await revoke_without_notify()
         output = await ws.receive_output(timeout=2)
         self.assertEqual(output, {"type": "websocket.close", "code": 4401})
+
+    async def test_revoca_notificata_chiude_una_volta_sola(self):
+        ws = WebsocketCommunicator(
+            application,
+            "/agent/v1",
+            headers=[(b"authorization", f"Bearer {self.w['agent_token']}".encode())],
+        )
+        await ws.connect()
+        await ws.send_json_to(HELLO)
+        await ws.receive_json_from()  # welcome
+        await sync_to_async(services.revoke_agent)(self.w["agent"])
+        output = await ws.receive_output(timeout=2)
+        self.assertEqual(output, {"type": "websocket.close", "code": 4401})
+        # Più giri del controllo periodico: non deve arrivare un secondo close.
+        self.assertTrue(await ws.receive_nothing(timeout=0.3))

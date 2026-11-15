@@ -1,6 +1,7 @@
 """Regole degli agenti: profili dichiarati, stati, consegna dei lavori (§4–§6)."""
 
 from datetime import timedelta
+from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -228,6 +229,17 @@ class PurgeTests(ServicesTestCase):
 
 
 class PresenzaTests(ServicesTestCase):
+    def test_revoca_notifica_solo_dopo_il_commit(self):
+        with mock.patch("hub.notify.agent_close") as closed:
+            with self.captureOnCommitCallbacks() as callbacks:
+                services.revoke_agent(self.agent)
+                closed.assert_not_called()
+            self.assertEqual(len(callbacks), 1)
+            callbacks[0]()
+        closed.assert_called_once_with(self.agent.id, "revoked")
+        self.agent.refresh_from_db()
+        self.assertIsNotNone(self.agent.revoked_at)
+
     def test_confine_canale_e_revoca(self):
         from unittest.mock import patch
 
