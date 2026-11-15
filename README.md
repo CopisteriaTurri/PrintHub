@@ -48,7 +48,7 @@ python manage.py create_api_key copisteria CopyaGo                 # key per un'
 python manage.py create_api_key copisteria telefono --profile etichetta   # limitata a un profilo
 ```
 
-La revoca si fa dall'admin (`/admin/`, azione «Revoca»): un agente revocato viene disconnesso subito.
+La revoca si fa dall'admin (`/admin/`, azione «Revoca» o campo `revoked_at` nella scheda): un agente revocato viene disconnesso subito e non riceve né aggiorna più lavori.
 
 ## Sviluppo
 

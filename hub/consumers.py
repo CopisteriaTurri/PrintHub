@@ -131,6 +131,10 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
         while True:
             await asyncio.sleep(settings.PRINTHUB_RESYNC_INTERVAL)
             try:
+                # Rete di sicurezza se la notifica di chiusura è andata persa.
+                if await database_sync_to_async(services.agent_revoked)(self.agent):
+                    await self.close(code=CLOSE_UNAUTHORIZED)
+                    return
                 offers = await database_sync_to_async(services.stale_offers)(self.agent)
                 for offer in offers:
                     await self.send_json(offer)

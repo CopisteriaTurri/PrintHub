@@ -591,6 +591,20 @@ def agent_seen(agent, channel_name=None, **fields):
     return qs.update(last_seen_at=timezone.now(), **fields)
 
 
+def agent_revoked(agent):
+    """Rilegge la revoca dal database: l'oggetto tenuto dal consumer è quello
+    caricato alla connessione e non vede una revoca arrivata dopo."""
+    return not Agent.objects.filter(pk=agent.pk, revoked_at__isnull=True).exists()
+
+
+def revoke_agent(agent):
+    """Revoca il token dell'agente (se non lo è già) e ne chiude la connessione."""
+    if agent.revoked_at is None:
+        agent.revoked_at = timezone.now()
+        agent.save(update_fields=["revoked_at"])
+    transaction.on_commit(lambda: notify.agent_close(agent.id, "revoked"))
+
+
 @transaction.atomic
 def hello(agent, msg, channel_name=None):
     """Gestisce il primo messaggio dell'agente. Restituisce (welcome, offerte)."""
@@ -639,6 +653,8 @@ def pending_offers(agent, job_id=None):
     """I messaggi `job.offer` da mandare all'agente: lavori in coda o consegnati
     ma non ancora confermati come stampati. Riproporre un lavoro già ricevuto è
     sicuro: l'agente lo riconosce dal suo registro e non lo ristampa (§6)."""
+    if agent_revoked(agent):
+        return []
     qs = Job.objects.filter(agent=agent, state__in=Job.PENDING_STATES)
     if job_id:
         qs = qs.filter(pk=job_id)
@@ -663,6 +679,8 @@ def stale_offers(agent):
     layer condiviso): un lavoro non resta mai fermo, al massimo arriva con
     qualche secondo di ritardo.
     """
+    if agent_revoked(agent):
+        return []
     cutoff = timezone.now() - timedelta(seconds=settings.PRINTHUB_REOFFER_AFTER)
     stale = Job.objects.filter(agent=agent, state=Job.State.QUEUED).filter(
         Q(offered_at__isnull=True) | Q(offered_at__lt=cutoff)
@@ -697,6 +715,9 @@ def update_job(agent, job_id, state, msg=None):
     nel log: un messaggio duplicato o in ritardo non deve far danni.
     """
     msg = msg or {}
+    if agent_revoked(agent):
+        log.warning("agente %s revocato: aggiornamento ignorato %s", agent, job_id)
+        return False
     with transaction.atomic():
         job = Job.objects.select_for_update().filter(pk=job_id, agent=agent).first()
         if job is None:
@@ -743,6 +764,8 @@ def ack_job(agent, job_id):
 def reject_job(agent, job_id, code, message=""):
     """`job.reject` (§5.2): `busy` lascia il lavoro in coda, gli altri lo fanno fallire."""
     if code == "busy":
+        if agent_revoked(agent):
+            return False
         with transaction.atomic():
             job = Job.objects.select_for_update().filter(pk=job_id, agent=agent).first()
             if job and not job.is_final:

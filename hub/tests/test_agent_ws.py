@@ -154,6 +154,14 @@ class AgentSocketTests(TempMediaMixin, TransactionTestCase):
         self.assertEqual(msg, {"type": "job.cancel", "job_id": job_id})
         await ws.disconnect()
 
+    async def test_revoca_chiude_la_connessione(self):
+        ws, _ = await self.open()
+        await sync_to_async(services.revoke_agent)(self.w["agent"])
+        output = await ws.receive_output(timeout=2)
+        self.assertEqual(output, {"type": "websocket.close", "code": 4401})
+        connected, _ = await self.connect().connect()
+        self.assertFalse(connected)
+
     async def test_messaggi_sconosciuti_ignorati(self):
         ws, _ = await self.open()
         await ws.send_json_to({"type": "futuro.messaggio"})
@@ -197,3 +205,25 @@ class ResyncTests(TempMediaMixin, TransactionTestCase):
         self.assertEqual(await ws.receive_json_from(), {"type": "pong"})
         self.assertTrue(await ws.receive_nothing(timeout=0.3))
         await ws.disconnect()
+
+    async def test_revoca_senza_notifica_chiude_al_controllo_periodico(self):
+        ws = WebsocketCommunicator(
+            application,
+            "/agent/v1",
+            headers=[(b"authorization", f"Bearer {self.w['agent_token']}".encode())],
+        )
+        await ws.connect()
+        await ws.send_json_to(HELLO)
+        await ws.receive_json_from()  # welcome
+
+        @sync_to_async
+        def revoke_without_notify():
+            with mock.patch("hub.notify.agent_close"):
+                services.revoke_agent(self.w["agent"])
+            upload = SimpleUploadedFile("f.pdf", PDF)
+            with mock.patch("hub.notify.job_created"):
+                services.create_job(self.w["key"], "k1", upload, {"profile": "fattura"})
+
+        await revoke_without_notify()
+        output = await ws.receive_output(timeout=2)
+        self.assertEqual(output, {"type": "websocket.close", "code": 4401})
