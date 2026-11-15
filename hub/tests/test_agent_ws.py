@@ -11,7 +11,7 @@ from channels.testing import WebsocketCommunicator
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TransactionTestCase, override_settings
 
-from hub import services
+from hub import notify, services
 from hub.models import Agent, Job
 from printhub.asgi import application
 
@@ -241,4 +241,27 @@ class ResyncTests(TempMediaMixin, TransactionTestCase):
         output = await ws.receive_output(timeout=2)
         self.assertEqual(output, {"type": "websocket.close", "code": 4401})
         # Più giri del controllo periodico: non deve arrivare un secondo close.
+        self.assertTrue(await ws.receive_nothing(timeout=0.3))
+
+    async def test_revoca_chiusa_dal_controllo_periodico_poi_notificata(self):
+        ws = WebsocketCommunicator(
+            application,
+            "/agent/v1",
+            headers=[(b"authorization", f"Bearer {self.w['agent_token']}".encode())],
+        )
+        await ws.connect()
+        await ws.send_json_to(HELLO)
+        await ws.receive_json_from()  # welcome
+
+        @sync_to_async
+        def revoke_without_notify():
+            with mock.patch("hub.notify.agent_close"):
+                services.revoke_agent(self.w["agent"])
+
+        await revoke_without_notify()
+        output = await ws.receive_output(timeout=2)
+        self.assertEqual(output, {"type": "websocket.close", "code": 4401})
+        # La notifica arriva dopo il close del controllo periodico: niente
+        # secondo close.
+        await sync_to_async(notify.agent_close)(self.w["agent"].id, "revoked")
         self.assertTrue(await ws.receive_nothing(timeout=0.3))
