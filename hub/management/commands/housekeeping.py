@@ -25,6 +25,9 @@ class Command(BaseCommand):
         ).update(last_attempt_at=started, failed=True)
         expired = services.expire_overdue()
         purged = services.purge_files(days)
+        from hub.webhooks import purge_deliveries
+
+        purge_deliveries()
         events = services.purge_events()
         finished = timezone.now()
         MaintenanceStatus.objects.filter(pk=1).filter(

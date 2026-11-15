@@ -1,0 +1,11 @@
+--- a/docs/PROTOCOL.md
++++ b/docs/PROTOCOL.md
+@@ -190,7 +190,7 @@
+ 
+ Per mostrare lo stato nel browser, il percorso è **browser → client → hub**: il browser interroga il proprio server (es. CopyaGo), che interroga l'hub. **Il browser non parla mai direttamente con l'hub**: la API key resta sul server del client.
+ 
+-v2: `webhook_url` nel `meta`, chiamato a ogni cambio di stato e firmato HMAC con un segreto della API key (utile per automazioni come n8n); eventualmente Server-Sent Events.
++Estensione opzionale v2: l'operatore configura destinazioni HTTPS per tenant e, facoltativamente, API key; non si accettano URL nel `meta`. L'hub emette un evento per ogni transizione finale `completed`, `failed`, `canceled` o `expired`. Il corpo JSON UTF-8 contiene `version=1`, `event_id` stabile, `event_type` (`job.<stato>`), `timestamp` UTC dell'evento, `job_id`, `client_ref`, `state` ed `error` (null oppure `{code}`). `X-PrintHub-Event` riporta `event_id`; `X-PrintHub-Timestamp` il tempo Unix del tentativo; `X-PrintHub-Signature` è `sha256=` seguito dall'HMAC-SHA256 esadecimale dei byte `timestamp + "." + corpo`, con segreto dedicato esterno configurato tramite riferimento. Il ricevente verifica i byte grezzi, applica una finestra temporale e deduplica `event_id`: i retry mantengono l'ID ma possono cambiare timestamp e firma. La consegna può essere ripetuta e non prova la stampa fisica. Eventuali Server-Sent Events restano da definire.
+ 
+ ### 3.6 Ristampa
+ 

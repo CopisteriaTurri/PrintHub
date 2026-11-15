@@ -19,7 +19,15 @@ from django.utils import timezone
 
 from . import notify, tokens
 from . import readiness as _readiness
-from .models import Agent, ApiKey, Job, JobEvent, Profile
+from .models import (
+    Agent,
+    ApiKey,
+    Job,
+    JobEvent,
+    Profile,
+    WebhookDelivery,
+    WebhookDestination,
+)
 
 log = logging.getLogger(__name__)
 
@@ -260,8 +268,39 @@ def _existing_for_key(api_key, idempotency_key, request_hash):
 
 
 def record_event(job, kind, source, details=None):
-    return JobEvent.objects.create(
+    event = JobEvent.objects.create(
         job=job, kind=kind, source=source, details=details or {}
+    )
+    enqueue_final(event)
+    return event
+
+
+def enqueue_final(event):
+    job = event.job
+    # Lo stato viene dall'evento, non dal lavoro: l'outbox descrive la
+    # transizione registrata (details["to"]), non lo stato corrente.
+    state = event.details.get("to")
+    if event.kind != "state_changed" or state not in Job.FINAL_STATES:
+        return
+    destinations = WebhookDestination.objects.filter(
+        tenant_id=job.tenant_id, enabled=True
+    ).filter(Q(api_key__isnull=True) | Q(api_key_id=job.api_key_id))
+    payload = {
+        "version": 1,
+        "event_id": str(event.pk),
+        "event_type": "job." + str(state),
+        "timestamp": iso(event.timestamp),
+        "job_id": job.pk,
+        "client_ref": job.client_ref,
+        "state": str(state),
+        "error": {"code": job.error_code} if job.error_code else None,
+    }
+    WebhookDelivery.objects.bulk_create(
+        [
+            WebhookDelivery(destination=d, event=event, payload=payload)
+            for d in destinations
+        ],
+        ignore_conflicts=True,
     )
 
 
@@ -823,7 +862,7 @@ def purge_events():
     count = 0
     while True:
         ids = list(
-            JobEvent.objects.filter(timestamp__lt=cutoff)
+            JobEvent.objects.filter(timestamp__lt=cutoff, deliveries__isnull=True)
             .order_by("pk")
             .values_list("pk", flat=True)[:1000]
         )

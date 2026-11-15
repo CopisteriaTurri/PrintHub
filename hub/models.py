@@ -301,3 +301,70 @@ class MaintenanceStatus(models.Model):
             < timezone.now()
             - timedelta(seconds=settings.PRINTHUB_HOUSEKEEPING_STALE_AFTER)
         )
+
+
+class WebhookDestination(models.Model):
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
+    api_key = models.ForeignKey(ApiKey, null=True, blank=True, on_delete=models.CASCADE)
+    name = models.CharField(max_length=100)
+    url = models.URLField(max_length=1000)
+    secret_ref = models.CharField(
+        max_length=100,
+        help_text="Nome della variabile d'ambiente contenente il segreto",
+    )
+    enabled = models.BooleanField(default=True)
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        from .webhooks import validate_destination
+
+        if self.api_key_id and self.api_key.tenant_id != self.tenant_id:
+            raise ValidationError("La API key deve appartenere allo stesso tenant")
+        try:
+            validate_destination(self.url, self.secret_ref)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+
+    def __str__(self):
+        return self.name
+
+
+class WebhookDelivery(models.Model):
+    destination = models.ForeignKey(WebhookDestination, on_delete=models.PROTECT)
+    event = models.ForeignKey(
+        JobEvent, on_delete=models.PROTECT, related_name="deliveries"
+    )
+    payload = models.JSONField()
+    created_at = models.DateTimeField(default=timezone.now)
+    attempts = models.PositiveIntegerField(default=0)
+    next_attempt_at = models.DateTimeField(default=timezone.now)
+    lease_until = models.DateTimeField(null=True, blank=True)
+    lease_token = models.CharField(max_length=64, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    failed_at = models.DateTimeField(null=True, blank=True)
+    result = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event", "destination"], name="webhook_event_destination"
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["completed_at", "failed_at", "next_attempt_at"],
+                name="webhook_pending",
+            )
+        ]
+
+
+class WebhookAttempt(models.Model):
+    delivery = models.ForeignKey(
+        WebhookDelivery, on_delete=models.CASCADE, related_name="attempt_log"
+    )
+    timestamp = models.DateTimeField(default=timezone.now)
+    result = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ["timestamp", "pk"]

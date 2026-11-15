@@ -134,7 +134,47 @@ all'elenco filtrato. La ristampa richiede conferma esplicita, controlla profilo,
 opzioni e API key originale, e crea un file indipendente; reinviare la stessa
 conferma non duplica il lavoro. Una richiesta di annullamento nello spooler
 attende il riscontro dell'agente: verificare la stampante prima di ristampare.
- 
+
+### Webhook opzionali (estensione v2)
+
+Le destinazioni si configurano nell'admin dai soli superuser per tenant e,
+facoltativamente, API key. Impostare `PRINTHUB_WEBHOOK_ALLOWED_HOSTS` come
+elenco di hostname HTTPS separati da virgole; sono consentite solo destinazioni
+pubbliche sulla porta 443, senza credenziali o redirect. DNS con qualsiasi IP
+privato, loopback, link-local o non globale viene rifiutato; la connessione è
+fissata all'IP verificato, con TLS e SNI per l'hostname. Non è previsto accesso
+LAN. Configurare un segreto dedicato come variabile d'ambiente, ad esempio
+`PRINTHUB_WEBHOOK_SECRET_N8N`, e inserire solo il nome nel campo `secret_ref`.
+Condividere il segreto con il ricevente tramite un canale sicuro. Per ruotarlo,
+coordinare il cambio con il ricevente e riavviare tutti i worker.
+
+Avviare `manage.py deliver_webhooks` come servizio supervisionato; `--once`
+tenta al massimo una consegna. L'outbox viene scritta insieme alla transizione
+finale; l'invio non blocca la stampa. Le consegne temporaneamente fallite sono
+riprovate con backoff fino a `PRINTHUB_WEBHOOK_MAX_ATTEMPTS` (default 8); 429,
+5xx, timeout e rete sono temporanei, altri errori HTTP permanenti. Le consegne
+concluse sono conservate per `PRINTHUB_WEBHOOK_RETENTION_DAYS` (default 90)
+giorni tramite housekeeping; quelle pendenti non vengono eliminate. Il lease
+scade dopo 60 secondi e l'invio viene terminato dopo 20 secondi, consentendo il
+recupero dopo un crash. È possibile una riconsegna dopo crash: deduplicare.
+
+Il corpo JSON UTF-8 versione 1 contiene `version`, `event_id`, `event_type`
+(`job.completed`, `job.failed`, `job.canceled`, `job.expired`), `timestamp`
+dell'evento UTC, `job_id`, `client_ref`, `state` ed `error` (`null` oppure
+`{"code": "..."}`).
+`X-PrintHub-Event` è l'ID stabile per deduplicare. `X-PrintHub-Timestamp` è il
+numero di secondi Unix del tentativo; `X-PrintHub-Signature` vale `sha256=`
+seguito dall'HMAC-SHA256 esadecimale di `timestamp + "." + corpo esatto`.
+Il ricevente deve confrontare la firma in tempo costante, rifiutare timestamp
+fuori dalla finestra concordata (ad esempio cinque minuti) e deduplicare per
+`event_id` in modo persistente; un retry usa lo stesso ID e un nuovo timestamp.
+Per n8n o CopyaGo verificare la firma sui byte grezzi prima di elaborare il JSON.
+Questa è un'estensione opzionale prevista per v2, non il protocollo agente v1.
+
+La proposta esatta per aggiornare CLIPrint è in
+[`docs/cliprint-webhook-v2.patch`](docs/cliprint-webhook-v2.patch); non è
+ancora applicata nel repository CLIPrint.
+
 ## Licenza
 
 Print Hub è software libero, copyleft: chiunque può usarlo, modificarlo e

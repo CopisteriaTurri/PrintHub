@@ -199,7 +199,59 @@ scheda, eventuale codice futuro) passano da `services.revoke_agent`: salva
   `create_api_key`, `create_agent`): il valore in chiaro si vede una volta sola.
   L'admin non permette di aggiungerli.
 
-## 7. Dove mettere le mani
+## 7. Webhook in uscita (estensione v2)
+
+Opzionali: senza `WebhookDestination` non parte niente. Il formato del corpo e
+della firma è nel README; qui c'è il percorso.
+
+```
+ services.record_event ──► enqueue_final ──► WebhookDelivery (outbox, stessa transazione)
+                                                    │
+ deliver_webhooks (worker) ── claim: lease 60 s + token ┘
+        │
+        └─► processo figlio `send_webhook <id> <token>` (timeout 20 s) ──► POST HTTPS firmato
+                 │ codice di uscita: 0 / EXIT_TEMPORARY / EXIT_PERMANENT
+                 ▼
+        esito scritto solo se il token è ancora quello del lease ──► WebhookAttempt
+```
+
+- **L'outbox nasce con la transizione.** `enqueue_final` sta in `services`, non
+  in `webhooks`: chi produce l'evento non dipende dal trasporto. Si accoda solo
+  per `state_changed` verso uno stato finale, leggendo lo stato da
+  `details["to"]` (la transizione registrata, non lo stato corrente). Un
+  rollback non lascia consegne; il vincolo unico evento/destinazione e
+  `ignore_conflicts` rendono innocuo un evento ripetuto.
+- **Destinazioni per tenant**: tutte quelle abilitate del tenant del lavoro,
+  senza API key o con la key del lavoro. In admin (solo superuser) tenant,
+  API key e URL non si cambiano dopo la creazione: le consegne in coda puntano
+  alla destinazione, cambiarla le manderebbe a un altro ricevente. Per un
+  ricevente nuovo si crea una destinazione nuova.
+- **Il worker non si blocca mai su un ricevente.** Ogni invio gira in un
+  processo figlio con timeout; il lease scade dopo 60 s, così un worker morto
+  libera la consegna. L'esito si scrive filtrando per `lease_token`: un figlio
+  in ritardo dopo che un altro worker ha ripreso la consegna non sovrascrive
+  niente. Una riconsegna dopo un crash è possibile: il ricevente deduplica per
+  `X-PrintHub-Event`.
+- **Uscita verso Internet, mai in LAN.** `validate_destination` vuole HTTPS
+  sulla 443, host in `PRINTHUB_WEBHOOK_ALLOWED_HOSTS`, niente credenziali
+  nell'URL. Al momento dell'invio il DNS viene risolto e basta un indirizzo non
+  globale per rifiutare tutto (difesa dal DNS rebinding);
+  `PinnedHTTPSConnection` si collega solo agli indirizzi validati, con il
+  certificato verificato sull'hostname. Li prova alternando IPv6 e IPv4
+  (`attempt_order`, la partenza ruota a ogni retry) entro `CONNECT_BUDGET`
+  (10 s su 20 del figlio): un IPv6 rotto che va in timeout non esaurisce il
+  tempo prima di arrivare a un IPv4. I redirect non si
+  seguono (un 3xx è un errore permanente).
+- **Permanente o temporaneo.** Permanenti: configurazione non valida,
+  certificato non valido, risposta 3xx/4xx diversa da 429, destinazione
+  disabilitata. Temporanei: segreto mancante nell'ambiente, rete, timeout,
+  altri errori TLS, 429, 5xx, figlio che non parte o va in crash. I temporanei
+  si ritentano con backoff esponenziale (massimo 1 h) fino a
+  `PRINTHUB_WEBHOOK_MAX_ATTEMPTS`.
+- `housekeeping` cancella le consegne concluse (riuscite o fallite) oltre
+  `PRINTHUB_WEBHOOK_RETENTION_DAYS`; quelle ancora pendenti restano.
+
+## 8. Dove mettere le mani
 
 - **Nuovo messaggio dall'agente**: funzione in `services`, handler di una riga
   nel dizionario di `receive_json`, test in `test_agent_ws.py` (logica in
@@ -209,5 +261,8 @@ scheda, eventuale codice futuro) passano da `services.revoke_agent`: salva
 - **Nuovo stato o transizione**: `Job.State`, `_AGENT_TRANSITIONS`, eventuali
   `FINAL_STATES`/`PENDING_STATES`/`STALLED_STATES`, PROTOCOL.md §4.
 - **Nuova regola di business**: in `services`, mai in view/consumer/admin.
+- **Nuovo evento verso i webhook**: condizione e payload in
+  `services.enqueue_final`; la classificazione degli errori di invio in
+  `webhooks.send`. Aggiornare il README (formato) e i test in `test_webhooks.py`.
 - Questo file va aggiornato quando cambia un flusso o un invariante descritto
   qui, non per ogni modifica.
