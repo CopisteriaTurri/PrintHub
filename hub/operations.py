@@ -1,6 +1,7 @@
 """Operazioni admin riservate ai superuser."""
 
 import uuid
+from datetime import timedelta
 from functools import wraps
 
 from django.contrib import admin, messages
@@ -10,10 +11,15 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.http import HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from . import services
 from .models import Agent, Job, MaintenanceStatus, Tenant
+
+# Finestra degli errori mostrati nel riepilogo: `updated_at` è l'ultima
+# transizione di stato, non esiste un campo dedicato alla chiusura.
+ERROR_WINDOW = timedelta(hours=24)
 
 
 def superuser(view):
@@ -34,6 +40,7 @@ def dashboard(request):
     tenant = request.GET.get("tenant", "")
     agent = request.GET.get("agent", "")
     state = request.GET.get("state", "")
+    recent = request.GET.get("recent", "")
     if tenant:
         if not tenant.isdecimal() or not Tenant.objects.filter(pk=tenant).exists():
             return HttpResponseBadRequest("Tenant non valido")
@@ -46,20 +53,36 @@ def dashboard(request):
         if state not in Job.State.values:
             return HttpResponseBadRequest("Stato non valido")
         jobs = jobs.filter(state=state)
+    # Filtro "errori recenti": lo stesso taglio temporale del riepilogo.
+    if recent:
+        jobs = jobs.filter(updated_at__gte=timezone.now() - ERROR_WINDOW)
+    # La presenza segue gli stessi filtri dei lavori; le opzioni dei select
+    # restano su tutti gli agenti, altrimenti dopo un filtro non si torna indietro.
+    agents = Agent.objects.select_related("tenant")
+    if tenant:
+        agents = agents.filter(tenant_id=tenant)
+    if agent:
+        agents = agents.filter(pk=agent)
     context = {
         **admin.site.each_context(request),
         "title": "Operatività",
         "jobs": Paginator(jobs, 30).get_page(request.GET.get("page")),
         "tenants": Tenant.objects.all(),
-        "agents": Agent.objects.select_related("tenant"),
+        "agents": agents,
+        "agent_choices": Agent.objects.select_related("tenant"),
         "states": Job.State.choices,
         "queued": jobs.filter(state=Job.State.QUEUED).count(),
         "stalled": jobs.filter(Job.stalled_filter()).count(),
-        "errors": jobs.filter(state=Job.State.FAILED).count(),
+        "errors": jobs.filter(
+            state=Job.State.FAILED,
+            updated_at__gte=timezone.now() - ERROR_WINDOW,
+        ).count(),
+        "errors_hours": int(ERROR_WINDOW.total_seconds() // 3600),
         "maintenance": MaintenanceStatus.objects.first(),
         "selected_tenant": tenant,
         "selected_agent": agent,
         "selected_state": state,
+        "selected_recent": recent,
     }
     return render(request, "admin/hub/operations.html", context)
 
@@ -135,6 +158,7 @@ def reprint(request, tenant_id, job_id):
                 "reprint-" + data["nonce"],
                 SimpleUploadedFile("reprint", contents),
                 meta,
+                source="admin",
             )
             if created:
                 services.record_event(

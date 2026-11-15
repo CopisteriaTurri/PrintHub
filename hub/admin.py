@@ -7,7 +7,7 @@ API key e token degli agenti si creano con i comandi `create_api_key` e
 from django.contrib import admin
 from django.utils import timezone
 
-from . import notify
+from . import services
 from .models import (
     Agent,
     ApiKey,
@@ -32,10 +32,11 @@ class TenantAdmin(admin.ModelAdmin):
 def revoke(modeladmin, request, queryset):
     now = timezone.now()
     for obj in queryset.filter(revoked_at__isnull=True):
-        obj.revoked_at = now
-        obj.save(update_fields=["revoked_at"])
         if isinstance(obj, Agent):
-            notify.agent_close(obj.id, "revoked")
+            services.revoke_agent(obj)
+        else:
+            obj.revoked_at = now
+            obj.save(update_fields=["revoked_at"])
 
 
 @admin.register(ApiKey)
@@ -94,6 +95,12 @@ class AgentAdmin(admin.ModelAdmin):
     @admin.display(boolean=True, description="online")
     def is_online(self, obj):
         return obj.online
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # Revocare dalla scheda deve disconnettere come l'azione «Revoca».
+        if obj.revoked_at and "revoked_at" in form.changed_data:
+            services.revoke_agent(obj)
 
     def has_add_permission(self, request):
         return False  # si creano con `manage.py create_agent`

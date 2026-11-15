@@ -27,6 +27,7 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
     agent = None
     ready = False  # diventa True dopo un `hello` valido
     resync_task = None
+    closing = False  # la chiusura dall'hub parte una volta sola
 
     async def connect(self):
         # L'autenticazione è il token nell'header Authorization: un browser non
@@ -131,6 +132,10 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
         while True:
             await asyncio.sleep(settings.PRINTHUB_RESYNC_INTERVAL)
             try:
+                # Rete di sicurezza se la notifica di chiusura è andata persa.
+                if await database_sync_to_async(services.agent_revoked)(self.agent):
+                    await self.close_once(CLOSE_UNAUTHORIZED)
+                    return
                 offers = await database_sync_to_async(services.stale_offers)(self.agent)
                 for offer in offers:
                     await self.send_json(offer)
@@ -189,4 +194,14 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
         code = (
             CLOSE_REPLACED if event.get("reason") == "replaced" else CLOSE_UNAUTHORIZED
         )
+        if self.resync_task:
+            self.resync_task.cancel()
+        await self.close_once(code)
+
+    async def close_once(self, code):
+        """Controllo periodico e notifica di revoca possono arrivare in
+        qualunque ordine prima del `disconnect`: il close parte solo al primo."""
+        if self.closing:
+            return
+        self.closing = True
         await self.close(code=code)

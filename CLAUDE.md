@@ -15,6 +15,8 @@ Progetto Django 5.2 (Python 3.13) con Channels (canali in memoria, Valkey opzion
 
 ## Struttura
 
+Prima di toccare `services`, `consumers` o `notify` leggi `ARCHITECTURE.md`: percorso di un lavoro, stati, connessione e revoca degli agenti, perché il channel layer è solo una sveglia. Aggiornalo quando cambia un flusso o un invariante descritto lì.
+
 - `hub/services.py` — **tutta la logica**: creazione lavori, idempotenza, stati, profili degli agenti. Non dipende dal trasporto.
 - `hub/views.py` — API HTTP dei client e download dei file per gli agenti: solo adattatori verso `services`.
 - `hub/consumers.py` — WebSocket degli agenti: solo adattatore verso `services` (via `database_sync_to_async`).

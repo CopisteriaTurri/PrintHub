@@ -48,7 +48,7 @@ python manage.py create_api_key copisteria CopyaGo                 # key per un'
 python manage.py create_api_key copisteria telefono --profile etichetta   # limitata a un profilo
 ```
 
-La revoca si fa dall'admin (`/admin/`, azione «Revoca»): un agente revocato viene disconnesso subito.
+La revoca si fa dall'admin (`/admin/`, azione «Revoca» o campo `revoked_at` nella scheda): un agente revocato viene disconnesso subito e non riceve né aggiorna più lavori.
 
 ## Sviluppo
 
@@ -129,7 +129,8 @@ admin segnala manutenzione oltre `PRINTHUB_HOUSEKEEPING_STALE_AFTER` secondi
 
 `/admin/operations/` è riservata ai superuser, poiché gli utenti staff non
 sono associati a tenant. Mostra lavori e presenza e permette di chiedere
-l'annullamento. La ristampa richiede conferma esplicita, controlla profilo,
+l'annullamento; il conteggio dei falliti copre le ultime 24 ore e porta
+all'elenco filtrato. La ristampa richiede conferma esplicita, controlla profilo,
 opzioni e API key originale, e crea un file indipendente; reinviare la stessa
 conferma non duplica il lavoro. Una richiesta di annullamento nello spooler
 attende il riscontro dell'agente: verificare la stampante prima di ristampare.
@@ -172,3 +173,15 @@ Questa è un'estensione opzionale prevista per v2, non il protocollo agente v1.
 La proposta esatta per aggiornare CLIPrint è in
 [`docs/cliprint-webhook-v2.patch`](docs/cliprint-webhook-v2.patch); non è
 ancora applicata nel repository CLIPrint.
+
+## Licenza
+
+Print Hub è software libero, copyleft: chiunque può usarlo, modificarlo e
+ridistribuirlo, purché le versioni derivate restino sotto la stessa licenza.
+
+Lo distribuiamo sotto GNU General Public License, versione 3 **o successiva**
+(GPL-3.0-or-later); il testo completo è nel file [LICENSE](LICENSE).
+
+Il programma è distribuito nella speranza che sia utile, ma **senza alcuna
+garanzia**, nemmeno quella implicita di commerciabilità o di idoneità a uno
+scopo particolare: vedi il testo della licenza per i dettagli.

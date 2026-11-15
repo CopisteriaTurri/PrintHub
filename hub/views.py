@@ -111,9 +111,7 @@ def healthz(request):
 
 @require_GET
 def readyz(request):
-    from .readiness import ready
-
-    result = ready()
+    result = services.readiness()
     return JsonResponse(
         {"status": "ok" if result else "unavailable"}, status=200 if result else 503
     )

@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("hub", "0004_maintenancestatus"),
+        ("hub", "0005_maintenancestatus_row"),
     ]
 
     operations = [

@@ -1,8 +1,9 @@
 """Messaggi verso le connessioni WebSocket degli agenti.
 
 Le view HTTP girano in un processo qualsiasi; la connessione dell'agente può
-stare in un altro. Il channel layer (Redis in produzione) li collega: ogni
-agente connesso ascolta il gruppo `agent-<id>`.
+stare in un altro. Il channel layer li collega (in memoria con un solo
+processo, Valkey o Redis con più di uno): ogni agente connesso ascolta il
+gruppo `agent-<id>`.
 """
 
 from asgiref.sync import async_to_sync
