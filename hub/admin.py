@@ -205,6 +205,14 @@ class SuperuserOnlyAdmin(admin.ModelAdmin):
 class WebhookDestinationAdmin(SuperuserOnlyAdmin):
     list_display = ["name", "tenant", "api_key", "enabled"]
 
+    def get_readonly_fields(self, request, obj=None):
+        # Le consegne in coda puntano alla destinazione: cambiarne tenant, key o
+        # URL dopo la creazione manderebbe payload già accodati altrove. Per un
+        # altro destinatario si crea una destinazione nuova.
+        if obj is not None:
+            return ["tenant", "api_key", "url"]
+        return []
+
 
 class WebhookAttemptInline(admin.TabularInline):
     model = WebhookAttempt

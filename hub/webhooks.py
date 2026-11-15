@@ -1,4 +1,5 @@
-"""Outbox e trasporto webhook; il worker limita ogni invio in un processo figlio."""
+"""Trasporto webhook: il worker consuma l'outbox creato da services.record_event
+e limita ogni invio in un processo figlio."""
 
 import hashlib
 import hmac
@@ -20,8 +21,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import Job, WebhookAttempt, WebhookDelivery, WebhookDestination
-from .services import iso
+from .models import WebhookAttempt, WebhookDelivery
 
 # Codici di uscita del processo figlio che invia la consegna: 0 successo,
 # EXIT_TEMPORARY da ritentare, EXIT_PERMANENT senza retry. Qualunque altra
@@ -53,35 +53,6 @@ def validate_destination(url, secret_ref):
     if not re.fullmatch(r"PRINTHUB_WEBHOOK_SECRET_[A-Z0-9_]+", secret_ref):
         raise ValueError("Riferimento segreto webhook non valido")
     return parts
-
-
-def enqueue_final(event):
-    job = event.job
-    # Lo stato viene dall'evento, non dal lavoro: l'outbox descrive la
-    # transizione registrata (details["to"]), non lo stato corrente.
-    state = event.details.get("to")
-    if event.kind != "state_changed" or state not in Job.FINAL_STATES:
-        return
-    destinations = WebhookDestination.objects.filter(
-        tenant_id=job.tenant_id, enabled=True
-    ).filter(Q(api_key__isnull=True) | Q(api_key_id=job.api_key_id))
-    payload = {
-        "version": 1,
-        "event_id": str(event.pk),
-        "event_type": "job." + str(state),
-        "timestamp": iso(event.timestamp),
-        "job_id": job.pk,
-        "client_ref": job.client_ref,
-        "state": str(state),
-        "error": {"code": job.error_code} if job.error_code else None,
-    }
-    WebhookDelivery.objects.bulk_create(
-        [
-            WebhookDelivery(destination=d, event=event, payload=payload)
-            for d in destinations
-        ],
-        ignore_conflicts=True,
-    )
 
 
 def claim():
@@ -169,13 +140,24 @@ def deliver_once():
 
 
 class PinnedHTTPSConnection(http.client.HTTPSConnection):
-    def __init__(self, host, address):
+    """Si collega solo agli indirizzi già validati, provandoli in ordine: un
+    indirizzo irraggiungibile (es. IPv6 senza rotta) non blocca gli altri."""
+
+    def __init__(self, host, addresses):
         super().__init__(host, 443, timeout=5, context=ssl.create_default_context())
-        self.address = address
+        self.addresses = list(addresses)
 
     def connect(self):
-        sock = socket.create_connection((self.address, 443), timeout=5)
-        self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+        error = None
+        for address in self.addresses:
+            try:
+                sock = socket.create_connection((address, 443), timeout=5)
+            except OSError as exc:
+                error = exc
+                continue
+            self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+            return
+        raise error or OSError("nessun indirizzo webhook disponibile")
 
 
 def send(delivery):
@@ -203,7 +185,7 @@ def send(delivery):
         signature = hmac.new(
             secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256
         ).hexdigest()
-        connection = PinnedHTTPSConnection(parts.hostname, sorted(addresses)[0])
+        connection = PinnedHTTPSConnection(parts.hostname, sorted(addresses))
         try:
             path = parts.path or "/"
             if parts.query:
@@ -226,9 +208,10 @@ def send(delivery):
             return 75 if response.status == 429 or response.status >= 500 else 1
         finally:
             connection.close()
-    except (ValueError, ssl.SSLError):
-        # Prima di OSError: SSLError ne è una sottoclasse, un certificato non
-        # valido è un errore permanente del ricevente, non un timeout di rete.
+    except (ValueError, ssl.SSLCertVerificationError):
+        # Prima di OSError: un certificato non valido è un errore permanente del
+        # ricevente. Gli altri errori TLS (es. SSLEOFError) sono OSError e si
+        # ritentano come gli errori di rete.
         return 1
     except (OSError, TimeoutError, http.client.HTTPException):
         return EXIT_TEMPORARY

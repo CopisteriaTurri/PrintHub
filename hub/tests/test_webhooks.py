@@ -65,7 +65,7 @@ class WebhookTests(TempMediaMixin, TestCase):
             ) as factory,
         ):
             self.assertEqual(webhooks.send(item), 0)
-        factory.assert_called_once_with("hook.example", "8.8.8.8")
+        factory.assert_called_once_with("hook.example", ["8.8.8.8"])
         kwargs = connection.request.call_args.kwargs
         body, headers = kwargs["body"], kwargs["headers"]
         self.assertEqual(json.loads(body), item.payload)
@@ -231,6 +231,52 @@ class WebhookTests(TempMediaMixin, TestCase):
             mock.patch("hub.webhooks.PinnedHTTPSConnection", return_value=connection),
         ):
             self.assertEqual(webhooks.send(item), 1)
+
+    def test_errore_tls_non_di_certificato_e_temporaneo(self):
+        item = self.finish()
+        connection = mock.Mock()
+        connection.request.side_effect = ssl.SSLEOFError("chiusa nell'handshake")
+        with (
+            mock.patch.dict("os.environ", {"PRINTHUB_WEBHOOK_SECRET_TEST": "secret"}),
+            mock.patch(
+                "socket.getaddrinfo", return_value=[(2, 1, 6, "", ("8.8.8.8", 443))]
+            ),
+            mock.patch("hub.webhooks.PinnedHTTPSConnection", return_value=connection),
+        ):
+            self.assertEqual(webhooks.send(item), webhooks.EXIT_TEMPORARY)
+
+    def test_connessione_prova_gli_altri_indirizzi_validati(self):
+        connection = webhooks.PinnedHTTPSConnection(
+            "hook.example", ["2001:4860::8888", "8.8.8.8"]
+        )
+        sock = object()
+        with (
+            mock.patch(
+                "socket.create_connection", side_effect=[OSError("no route"), sock]
+            ) as create,
+            mock.patch.object(connection._context, "wrap_socket") as wrap,
+        ):
+            connection.connect()
+        self.assertEqual(
+            [c.args[0] for c in create.call_args_list],
+            [("2001:4860::8888", 443), ("8.8.8.8", 443)],
+        )
+        wrap.assert_called_once_with(sock, server_hostname="hook.example")
+        self.assertIs(connection.sock, wrap.return_value)
+        with mock.patch("socket.create_connection", side_effect=OSError("giù")):
+            with self.assertRaises(OSError):
+                connection.connect()
+
+    def test_admin_destinazione_tenant_bloccato_in_modifica(self):
+        from django.contrib import admin
+
+        model_admin = admin.site._registry[WebhookDestination]
+        request = mock.Mock()
+        self.assertEqual(model_admin.get_readonly_fields(request), [])
+        self.assertEqual(
+            model_admin.get_readonly_fields(request, self.destination),
+            ["tenant", "api_key", "url"],
+        )
 
     def test_uscita_anomala_del_figlio_e_temporanea(self):
         item = self.finish()
