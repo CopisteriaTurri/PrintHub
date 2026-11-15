@@ -1,9 +1,10 @@
 """Regole degli agenti: profili dichiarati, stati, consegna dei lavori (§4–§6)."""
 
 from datetime import timedelta
+from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from hub import services
@@ -100,6 +101,17 @@ class OffersTests(ServicesTestCase):
         self.assertEqual(services.pending_offers(self.agent), [])
         self.assertEqual(self.state(job), "expired")
 
+    def test_agente_revocato_non_riceve_offerte(self):
+        job = self.job()
+        Agent.objects.filter(pk=self.agent.pk).update(revoked_at=timezone.now())
+        self.assertIsNone(self.agent.revoked_at)
+        self.assertEqual(services.pending_offers(self.agent), [])
+        with override_settings(PRINTHUB_REOFFER_AFTER=0):
+            self.assertEqual(services.stale_offers(self.agent), [])
+        job.refresh_from_db()
+        self.assertIsNone(job.offered_at)
+        self.assertFalse(job.events.filter(kind="offer_attempt").exists())
+
 
 class TransitionsTests(ServicesTestCase):
     def test_percorso_normale(self):
@@ -146,6 +158,19 @@ class TransitionsTests(ServicesTestCase):
         other, _ = Agent.create(self.w["tenant"], "pc-foto")
         self.assertFalse(services.update_job(other, job.id, "completed"))
         self.assertEqual(self.state(job), "queued")
+
+    def test_agente_revocato_non_cambia_lo_stato(self):
+        job = self.job()
+        # Come nel consumer: l'oggetto in memoria è quello di prima della revoca.
+        Agent.objects.filter(pk=self.agent.pk).update(revoked_at=timezone.now())
+        self.assertIsNone(self.agent.revoked_at)
+        self.assertFalse(services.ack_job(self.agent, job.id))
+        self.assertFalse(services.update_job(self.agent, job.id, "completed"))
+        self.assertFalse(services.reject_job(self.agent, job.id, "printer_offline"))
+        services.reject_job(self.agent, job.id, "busy")
+        job.refresh_from_db()
+        self.assertEqual((job.state, job.agent_seen_at), ("queued", None))
+        self.assertFalse(job.events.filter(source="agent").exists())
 
     def test_reject_busy_lascia_in_coda(self):
         job = self.job()
@@ -204,6 +229,17 @@ class PurgeTests(ServicesTestCase):
 
 
 class PresenzaTests(ServicesTestCase):
+    def test_revoca_notifica_solo_dopo_il_commit(self):
+        with mock.patch("hub.notify.agent_close") as closed:
+            with self.captureOnCommitCallbacks() as callbacks:
+                services.revoke_agent(self.agent)
+                closed.assert_not_called()
+            self.assertEqual(len(callbacks), 1)
+            callbacks[0]()
+        closed.assert_called_once_with(self.agent.id, "revoked")
+        self.agent.refresh_from_db()
+        self.assertIsNotNone(self.agent.revoked_at)
+
     def test_confine_canale_e_revoca(self):
         from unittest.mock import patch
 
