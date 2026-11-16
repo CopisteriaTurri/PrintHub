@@ -1,5 +1,5 @@
 -r requirements.txt
 black>=26.10,<27
 ruff>=0.17.5,<1
-coverage>=7.17.2,<8
+coverage>=7.17.3,<8
 daphne>=4.2.3,<5  # richiesto da channels.testing
