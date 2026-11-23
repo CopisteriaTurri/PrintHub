@@ -180,8 +180,12 @@ ancora applicata nel repository CLIPrint.
 Print Hub è software libero, copyleft: chiunque può usarlo, modificarlo e
 ridistribuirlo, purché le versioni derivate restino sotto la stessa licenza.
 
-Lo distribuiamo sotto GNU General Public License, versione 3 **o successiva**
-(GPL-3.0-or-later); il testo completo è nel file [LICENSE](LICENSE).
+Lo distribuiamo sotto GNU Affero General Public License, versione 3 **o successiva**
+(AGPL-3.0-or-later). Il testo completo è nel file [LICENSE](LICENSE).
+
+Se modifichi Print Hub e lo rendi utilizzabile via rete, la sezione 13
+richiede di offrire agli utenti che interagiscono con quella versione
+l'accesso gratuito al suo codice sorgente corrispondente.
 
 Il programma è distribuito nella speranza che sia utile, ma **senza alcuna
 garanzia**, nemmeno quella implicita di commerciabilità o di idoneità a uno
